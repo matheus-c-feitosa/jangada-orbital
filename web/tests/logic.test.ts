@@ -1,0 +1,119 @@
+import { describe, expect, test } from 'vitest'
+import { cellKey, cellsInRing, circleRing, pointInRing, type Ring } from '../src/geo/aoi'
+import { classBreaks, classOf, compareMonth, daysIn } from '../src/calendar/stats'
+import { buildCsv } from '../src/data/csv'
+import type { AreaSeries, Manifest } from '../src/data/load'
+
+const square: Ring = [[-38.5, -4.0], [-38.2, -4.0], [-38.2, -3.7], [-38.5, -3.7]]
+
+describe('area of interest', () => {
+  test('point in polygon', () => {
+    expect(pointInRing(-38.3, -3.9, square)).toBe(true)
+    expect(pointInRing(-38.6, -3.9, square)).toBe(false)
+  })
+
+  test('cells are counted by their centre', () => {
+    const { cells, box } = cellsInRing(square)
+    expect(cells.size).toBe(9) // centres -38.45..-38.25 x -3.95..-3.75
+    expect(cells.has(cellKey(-40, -385))).toBe(true) // centre (-38.45, -3.95)
+    expect(cells.has(cellKey(-37, -382))).toBe(false) // centre (-38.15, -3.65) is outside
+    expect(box).toEqual({ latMin: -40, latMax: -37, lonMin: -385, lonMax: -382 })
+  })
+
+  test('tiny area with no cell centre inside yields no cells', () => {
+    expect(cellsInRing([[-38.51, -3.99], [-38.505, -3.99], [-38.505, -3.985]]).cells.size).toBe(0)
+  })
+
+  test('circle radius is respected', () => {
+    const ring = circleRing(-7.23, -39.31, 30)
+    expect(ring).toHaveLength(65)
+    const [lon, lat] = ring[0] // due north
+    expect(lon).toBeCloseTo(-39.31, 6)
+    expect((lat + 7.23) * 111.195).toBeCloseTo(30, 1)
+  })
+})
+
+describe('month comparison', () => {
+  // Novembers 2001..2010 = 10, 20, ..., 100; then Nov 2011 partial (15 of 30 days).
+  const months: string[] = []
+  const values: number[] = []
+  for (let y = 2001; y <= 2011; y++) {
+    months.push(`${y}-10`, `${y}-11`)
+    values.push(999, y === 2011 ? 60 : (y - 2000) * 10)
+  }
+  const t = months.indexOf('2011-11')
+
+  test('partial month is compared pro rata', () => {
+    const c = compareMonth(months, values, t, 15)
+    expect(c.partial).toBe(true)
+    expect(c.median).toBe(55)
+    expect(c.expected).toBeCloseTo(27.5)
+    expect(c.ratio).toBeCloseTo(60 / 27.5)
+    expect(c.rank).toBe(1) // pace 120 beats every past November
+    expect(c.of).toBe(11)
+    expect(c.unusual).toBe(true)
+  })
+
+  test('a full month at the median is not unusual', () => {
+    const c = compareMonth(months, values.map((v, i) => (i === t ? 55 : v)), t, 30)
+    expect(c.ratio).toBeCloseTo(1)
+    expect(c.unusual).toBe(false)
+  })
+
+  test('days in month', () => {
+    expect(daysIn('2024-02')).toBe(29)
+    expect(daysIn('2026-11')).toBe(30)
+  })
+
+  test('class breaks', () => {
+    const b = classBreaks([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
+    expect(b).toHaveLength(6)
+    expect(classOf(0, b)).toBe(0)
+    expect(classOf(1, b)).toBe(1)
+    expect(classOf(14, b)).toBe(7)
+  })
+})
+
+describe('CSV export', () => {
+  const series: AreaSeries = {
+    name: 'Test',
+    months: ['2023-12', '2024-01'],
+    value: [12.34, 5],
+    lo: [12.34, 4],
+    hi: [12.34, 6],
+    source: [0, 2],
+    observed: { Terra: [3, 0], Aqua: [12, 9], 'S-NPP': [40, null], 'NOAA-20': [41, 20], 'NOAA-21': [0, 22] },
+    viirs_k: [50, 30],
+  }
+  const manifest = { data_version: '2026-11-14', model_version: 'cal-1.0', unit: 'u', grid_deg: 0.1 } as Manifest
+
+  test('header, columns, empty vs zero, totals', () => {
+    const csv = buildCsv(series, { manifest, areaLabel: 'Test', from: '2023-12', to: '2024-01' })
+    const rows = csv.trim().split('\n').filter((l) => !l.startsWith('#'))
+    expect(rows[0]).toBe('month,harmonized,harmonized_lo,harmonized_hi,source,terra_n,aqua_n,snpp_n,noaa20_n,noaa21_n,viirs_n_1km')
+    expect(rows[1]).toBe('2023-12,12.3,12.3,12.3,aqua_observed,3,12,40,41,0,50')
+    expect(rows[2]).toBe('2024-01,5,4,6,viirs_calibrated,0,9,,20,22,30')
+    expect(csv.split('\n').filter((l) => l.startsWith('#'))).toHaveLength(5)
+  })
+
+  test('range filter', () => {
+    const csv = buildCsv(series, { manifest, areaLabel: 'Test', from: '2024-01', to: '2024-01' })
+    expect(csv.trim().split('\n').filter((l) => !l.startsWith('#'))).toHaveLength(2)
+  })
+})
+
+describe('noise floor', () => {
+  test('a tiny month above a near-zero history is not unusual', () => {
+    const months = Array.from({ length: 12 }, (_, i) => `${2001 + i}-11`)
+    const values = [0, 0, 1, 0, 0, 2, 0, 0, 1, 0, 0, 4]
+    expect(compareMonth(months, values, 11, 30).unusual).toBe(false)
+  })
+})
+
+describe('tiles', () => {
+  test('a box inside one 2-degree tile needs one tile; a box across a corner needs four', async () => {
+    const { tilesForBox } = await import('../src/geo/aoi')
+    expect(tilesForBox({ latMin: -79, latMax: -61, lonMin: -399, lonMax: -381 }, 20)).toEqual(['-4_-20'])
+    expect(tilesForBox({ latMin: -81, latMax: -79, lonMin: -401, lonMax: -399 }, 20).sort()).toEqual(['-4_-20', '-4_-21', '-5_-20', '-5_-21'].sort())
+  })
+})

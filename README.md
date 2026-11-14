@@ -45,10 +45,30 @@ cd pipeline
 uv run jangada-download all         # ~20 min: yearly files (5 min, 3.2 GB, no key) + area API (~15 min, paced)
 uv run jangada-download crosscheck  # checks API + border clipping against the yearly file (NOAA-20, Sep 2025)
 uv run jangada-aggregate            # monthly counts per 0.1° cell and satellite -> data/processed/
+uv run jangada-regions              # cell -> Brazilian state (IBGE)
+uv run jangada-harmonize            # calibration, held-out validation, harmonized series (docs/METHOD.md)
+uv run jangada-export-web           # web/public/data/{manifest.json, observed.parquet, harmonized.parquet}
+uv run pytest                       # invariants of the exported data and calibration tests
 ```
 
 The download is resumable: stop it and run it again at any time. For long runs on a remote machine:
 `setsid nohup uv run jangada-download all > ../data/download.log 2>&1 &`.
+
+## Web app
+
+```sh
+cd web
+npm ci
+npm run dev        # http://localhost:5173 (reads web/public/data, produced by jangada-export-web)
+npm test           # vitest: area → cells, month comparison, CSV
+npm run build      # typecheck + static build in web/dist (deployed to GitHub Pages by .github/workflows/pages.yml)
+```
+
+Stack: React, Vite, TypeScript, MapLibre GL (OpenFreeMap basemap, © OpenStreetMap contributors), terra-draw, hyparquet.
+Brazil and the 27 states load from `series.json`. Drawn areas fetch only the 2° × 2° tiles they touch
+(`web/public/data/tiles/`, a few hundred KB; GitHub Pages gzips `.parquet`, which rules out HTTP range requests).
+The full harmonized and observed datasets stay downloadable as `web/public/data/*.parquet`. No server, no login,
+no API key in the browser.
 
 ## NASA data
 
