@@ -10,6 +10,7 @@ import { compareMonth } from './calendar/stats'
 import { AnswerLine } from './calendar/AnswerLine'
 import { CalendarTable } from './calendar/CalendarTable'
 import { SeasonRhythm } from './calendar/SeasonRhythm'
+import { YearToDate } from './calendar/YearToDate'
 import type { DrawMode, Theme } from './map/MapView'
 import { AreaPanel, SAT_LABEL, type Area, type View } from './AreaPanel'
 import { Method } from './Method'
@@ -220,6 +221,7 @@ export function App() {
                   : `Fire detections per month as delivered by ${SAT_LABEL[sat]} (not comparable across sensors)`}
               />
             )}
+            {series && !areaLoading && <YearToDate months={series.months} values={series.value} lastMonth={partialMonth} days={partialDays} />}
             {series && !areaLoading && <SeasonRhythm months={series.months} values={series.value} fromYear={fromYear} toYear={endYear} />}
           </main>
         </div>
