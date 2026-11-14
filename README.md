@@ -64,7 +64,9 @@ npm test           # vitest: area → cells, month comparison, CSV
 npm run build      # typecheck + static build in web/dist (deployed to GitHub Pages by .github/workflows/pages.yml)
 ```
 
-Stack: React, Vite, TypeScript, MapLibre GL (OpenFreeMap basemap, © OpenStreetMap contributors), terra-draw, hyparquet.
+Stack: React, Vite, TypeScript, Tailwind CSS 4 + shadcn/ui (Radix), MapLibre GL (OpenFreeMap basemap, © OpenStreetMap
+contributors), terra-draw, hyparquet. Colors live once in `web/src/styles.css` (Jangada tokens → shadcn variables →
+Tailwind theme); the dark theme follows `<html data-theme>`.
 Brazil and the 27 states load from `series.json`. Drawn areas fetch only the 2° × 2° tiles they touch
 (`web/public/data/tiles/`, a few hundred KB; GitHub Pages gzips `.parquet`, which rules out HTTP range requests).
 The full harmonized and observed datasets stay downloadable as `web/public/data/*.parquet`. No server, no login,

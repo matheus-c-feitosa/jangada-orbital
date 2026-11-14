@@ -6,7 +6,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`
 export function Method({ manifest, repo }: { manifest: Manifest | null; repo: string }) {
   const v = manifest?.validation
   return (
-    <main className="method">
+    <main className="mx-auto max-w-[72ch] px-6 pt-8 pb-16 [&_a]:text-ink [&_a]:underline [&_h1]:mb-3 [&_h1]:text-[30px] [&_h1]:font-semibold [&_h1]:tracking-[-0.02em] [&_h2]:mt-8 [&_h2]:mb-2 [&_h2]:text-[19px] [&_h2]:font-semibold [&_li]:text-ink-2 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-6 [&_p]:my-3 [&_p]:text-ink-2 [&_strong]:text-ink [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-6">
       <h1>How the harmonized calendar is made</h1>
       <p>
         NASA's MODIS (1 km, since 2000) and VIIRS (375 m, since 2012) sensors detect active fires, but VIIRS sees about six
@@ -23,7 +23,7 @@ export function Method({ manifest, repo }: { manifest: Manifest | null; repo: st
       </ol>
       <h2>Measured error</h2>
       <p>Fitted on 2012–2020 and tested on {v?.heldout_years ?? '2021–2022'}, years the model never saw:</p>
-      <table className="num">
+      <table className="my-2 border-collapse tabular-nums [&_td]:border-b [&_td]:border-line [&_td]:py-1.5 [&_td]:pr-6 [&_th]:border-b [&_th]:border-line [&_th]:py-1.5 [&_th]:pr-6 [&_th]:text-left [&_th]:font-medium">
         <thead><tr><th scope="col">Level</th><th scope="col">Within ±20%</th></tr></thead>
         <tbody>
           <tr><td>Brazil, per month</td><td>{v ? `mean error ${pct(v.mape_national_month)}` : '…'}</td></tr>

@@ -24,7 +24,7 @@ interface Props {
 
 setWorkerUrl(workerUrl)
 
-const BASEMAP = { dark: 'https://tiles.openfreemap.org/styles/dark', light: 'https://tiles.openfreemap.org/styles/positron' }
+const BASEMAP = { dark: 'https://tiles.openfreemap.org/styles/fiord', light: 'https://tiles.openfreemap.org/styles/positron' }
 const BRAZIL: [number, number, number, number] = [-74, -34, -34.7, 5.4]
 const OFFLINE_STYLE = (bg: string): StyleSpecification => ({
   version: 8,
@@ -136,8 +136,8 @@ export function MapView({ theme, states, stateCode, ring, bounds, drawMode, onDr
   }, [ready, drawMode])
 
   return (
-    <div className="map" role="region" aria-label="Map of the selected area">
-      {offline && <p className="map-note">Basemap unavailable: showing state outlines only.</p>}
+    <div className="map relative h-80 overflow-hidden rounded-xl border border-line bg-surface-2 max-lg:h-64" role="region" aria-label="Map of the selected area">
+      {offline && <p className="absolute left-2 top-2 z-10 m-0 rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink-2">Basemap unavailable: showing state outlines only.</p>}
       <div ref={container} style={{ position: 'absolute', inset: 0 }} />
     </div>
   )

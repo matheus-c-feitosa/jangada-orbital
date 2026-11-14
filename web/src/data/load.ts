@@ -17,6 +17,7 @@ export interface Manifest {
   last_day_partial?: boolean
   /** browser tiles: 2° x 2° Parquet files fetched whole (GitHub Pages gzip breaks range requests) */
   tiles: { path: string; deg: number; cells: number; ids: string[] }
+  files: Record<string, { path: string; bytes: number; sha256: string; rows?: number }>
   validation: {
     heldout_years: string
     mape_state: number
@@ -60,21 +61,30 @@ export interface AppData {
   stateList: StateInfo[]
 }
 
-export const dataUrl = (file: string) => new URL(`data/${file}`, document.baseURI).href
+// GitHub Pages caches every file for 10 minutes. The manifest is always revalidated; every other data file carries
+// the data version in its URL, so a new export can never be mixed with a stale cached file.
+let dataVersion = ''
+export const dataUrl = (file: string) => {
+  const url = new URL(`data/${file}`, document.baseURI)
+  if (dataVersion) url.searchParams.set('v', dataVersion)
+  return url.href
+}
 
-async function getJson<T>(file: string): Promise<T> {
-  const response = await fetch(dataUrl(file))
+async function getJson<T>(file: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(dataUrl(file), init)
   if (!response.ok) throw new Error(`${file}: HTTP ${response.status}`)
   return (await response.json()) as T
 }
 
 export async function loadAppData(): Promise<AppData> {
-  const [manifest, doc, states] = await Promise.all([
-    getJson<Manifest>('manifest.json'),
+  dataVersion = ''
+  const manifest = await getJson<Manifest>('manifest.json', { cache: 'no-cache' })
+  if (manifest.schema !== 1 || !manifest.tiles) throw new Error(`Unsupported data schema ${manifest.schema}`)
+  dataVersion = manifest.files.harmonized.sha256.slice(0, 12)
+  const [doc, states] = await Promise.all([
     getJson<SeriesDoc>('series.json'),
     getJson<GeoJSON.FeatureCollection>('states.geojson'),
   ])
-  if (manifest.schema !== 1) throw new Error(`Unsupported data schema ${manifest.schema}`)
   const areas: Record<string, AreaSeries> = {}
   for (const [code, area] of Object.entries(doc.areas)) {
     areas[code] = { ...area, months: doc.months, source: doc.source }

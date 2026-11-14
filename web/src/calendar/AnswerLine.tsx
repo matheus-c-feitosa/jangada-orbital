@@ -17,9 +17,9 @@ interface Props {
 export function AnswerLine({ areaName, comparison: c, loading, cells, lastDayPartial }: Props) {
   if (loading || !c) {
     return (
-      <section className="answer" aria-busy="true">
-        <h1>{areaName}</h1>
-        <p className="lead">Loading fire history…</p>
+      <section className="flex flex-col gap-2 mb-5" aria-busy="true">
+        <h1 className="m-0 text-[28px] font-semibold leading-tight tracking-[-0.02em] text-balance max-lg:text-[22px]">{areaName}</h1>
+        <p className="m-0 text-lg text-ink-2">Loading fire history…</p>
       </section>
     )
   }
@@ -30,28 +30,28 @@ export function AnswerLine({ areaName, comparison: c, loading, cells, lastDayPar
     : `${monthName} ${y}`
   const usual = c.partial ? 'the usual pace for these days' : `the usual ${monthName}`
   return (
-    <section className="answer" aria-live="polite">
-      <h1>{areaName}</h1>
+    <section className="flex flex-col gap-2 mb-5" aria-live="polite">
+      <h1 className="m-0 text-[28px] font-semibold leading-tight tracking-[-0.02em] text-balance max-lg:text-[22px]">{areaName}</h1>
       {c.median === 0 && c.value === 0 ? (
-        <p className="lead">{period}: no fires detected, as usual for {monthName}.</p>
+        <p className="m-0 max-w-[70ch] text-lg leading-relaxed text-pretty max-lg:text-base">{period}: no fires detected, as usual for {monthName}.</p>
       ) : (
-        <p className="lead">
-          {period}: <strong className="num">{fmt.format(c.value)} detections</strong>
+        <p className="m-0 max-w-[70ch] text-lg leading-relaxed text-pretty max-lg:text-base">
+          {period}: <strong className="font-semibold tabular-nums">{fmt.format(c.value)} detections</strong>
           {c.ratio !== null ? (
-            <> — <strong className="num ratio">{ratioFmt.format(c.ratio)}×</strong> {usual}.</>
+            <> — <strong className="text-[22px] font-semibold tabular-nums">{ratioFmt.format(c.ratio)}×</strong> {usual}.</>
           ) : (
             <>, where none are usually detected in {monthName}.</>
           )}
         </p>
       )}
-      <p className="meta num">
+      <p className="m-0 text-sm text-ink-2 tabular-nums">
         {c.partial ? 'On pace for' : 'Ranks'} #{c.rank} of {c.of} {monthName}s since {y - c.of + 1} · usual {monthName}:{' '}
         {fmt.format(c.median)} detections{cells !== undefined ? ` · ${fmt.format(cells)} grid cells` : ''}
       </p>
       {c.unusual ? (
-        <span className="badge unusual"><AlertTriangle size={16} aria-hidden="true" /> Unusual: above the 90th percentile of past {monthName}s</span>
+        <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-current px-2.5 py-1 text-sm font-semibold text-unusual"><AlertTriangle size={16} aria-hidden="true" /> Unusual: above the 90th percentile of past {monthName}s</span>
       ) : (
-        <span className="badge usual"><CheckCircle2 size={16} aria-hidden="true" /> Within the usual range</span>
+        <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-current px-2.5 py-1 text-sm font-semibold text-ok"><CheckCircle2 size={16} aria-hidden="true" /> Within the usual range</span>
       )}
     </section>
   )

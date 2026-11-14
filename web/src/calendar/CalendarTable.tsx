@@ -4,6 +4,8 @@ import { classBreaks, classOf, compareMonth, daysIn } from './stats'
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const SOURCE_LABEL = ['Aqua MODIS, observed', 'Terra MODIS, scaled to Aqua (estimate)', 'VIIRS, calibrated to Aqua (estimate)']
 const fmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+// Literal class names so Tailwind generates them.
+const BG = ['bg-c0', 'bg-c1', 'bg-c2', 'bg-c3', 'bg-c4', 'bg-c5', 'bg-c6', 'bg-c7']
 
 interface Props {
   months: string[]
@@ -100,14 +102,14 @@ export function CalendarTable({ months, values, source, fromYear, toYear, partia
 
   return (
     <div>
-      <div className="calendar-wrap">
-        <table className="cal num">
-          <caption>{caption}</caption>
+      <div className="overflow-x-auto">
+        <table className="border-separate border-spacing-[3px] text-xs tabular-nums max-lg:border-spacing-[2px] max-lg:text-[11px]">
+          <caption className="pb-1.5 text-left text-[13px] text-ink-2">{caption}</caption>
           <thead>
             <tr>
               <td />
               {MONTHS.map((m) => (
-                <th key={m} scope="col" abbr={m}>{m[0]}<span className="visually-hidden">{m.slice(1)}</span></th>
+                <th key={m} scope="col" abbr={m} className="h-[22px] px-1.5 text-center font-medium text-ink-3">{m[0]}<span className="sr-only">{m.slice(1)}</span></th>
               ))}
             </tr>
           </thead>
@@ -117,13 +119,13 @@ export function CalendarTable({ months, values, source, fromYear, toYear, partia
               const estimated = row.some((c) => c.source !== null && c.source > 0)
               return (
                 <tr key={year}>
-                  <th scope="row">{year}{estimated && <small>est.</small>}</th>
+                  <th scope="row" className="whitespace-nowrap px-1.5 text-right font-medium text-ink-3">{year}{estimated && <small className="ml-1 font-normal max-lg:ml-0 max-lg:block max-lg:leading-none">est.</small>}</th>
                   {row.map((c) => (
-                    <td key={c.month}>
+                    <td key={c.month} className="p-0">
                       <button
                         type="button"
                         ref={(el) => { if (el) buttons.current.set(c.month, el); else buttons.current.delete(c.month) }}
-                        className={`cell ${c.cls < 0 ? 'na' : `c${c.cls}`}${c.month === partialMonth ? ' partial' : ''}${c.unusual ? ' unusual' : ''}`}
+                        className={`cell relative block h-5 w-[clamp(17px,4.2vw,52px)] cursor-pointer rounded border-0 p-0 hover:shadow-[0_0_0_2px_var(--ink-3)] data-[active=true]:shadow-[0_0_0_2px_var(--ink)] max-lg:w-[clamp(17px,5.1vw,52px)] ${c.cls < 0 ? 'cursor-default border border-dashed border-line bg-transparent' : BG[c.cls]}${c.month === partialMonth ? ' cell-partial' : ''}${c.unusual ? ' cell-unusual' : ''}`}
                         tabIndex={c.month === activeCell.month ? 0 : -1}
                         aria-label={label(c)}
                         data-active={c.month === activeCell.month}
@@ -139,16 +141,16 @@ export function CalendarTable({ months, values, source, fromYear, toYear, partia
           </tbody>
         </table>
       </div>
-      <p className="detail" aria-live="polite">{activeCell && <><strong>{label(activeCell).split(':')[0]}</strong>{label(activeCell).slice(label(activeCell).indexOf(':'))}</>}</p>
-      <div className="legend">
-        <span className="item"><span className="sw c0" /> No detections</span>
-        <span className="ramp" aria-label="Detections per month, 7 classes from low to high">
-          {[1, 2, 3, 4, 5, 6, 7].map((k) => <span key={k} className={`sw c${k}`} title={rangeText(k)} />)}
+      <p className="mt-3 min-h-11 text-sm text-ink-2 [&_strong]:text-ink" aria-live="polite">{activeCell && <><strong>{label(activeCell).split(':')[0]}</strong>{label(activeCell).slice(label(activeCell).indexOf(':'))}</>}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs text-ink-2">
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3 w-[22px] rounded-sm bg-c0" /> No detections</span>
+        <span className="flex items-center gap-0.5" aria-label="Detections per month, 7 classes from low to high">
+          {[1, 2, 3, 4, 5, 6, 7].map((k) => <span key={k} className={`inline-block h-3 w-[22px] rounded-sm ${BG[k]}`} title={rangeText(k)} />)}
         </span>
-        <span className="item">{breaks.length ? `${rangeText(1)} … ${rangeText(7)} detections / month` : ''}</span>
-        {source && <span className="item"><span className="dot" /> Unusual: above the 90th percentile of past years</span>}
-        <span className="item"><span className="sw c3 cell partial" style={{ width: 22, height: 12 }} /> Partial month</span>
-        {source && <span className="item">est. = year includes estimates (Terra 2000–02, VIIRS from 2024)</span>}
+        <span className="inline-flex items-center gap-1.5">{breaks.length ? `${rangeText(1)} … ${rangeText(7)} detections / month` : ''}</span>
+        {source && <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-unusual" /> Unusual: above the 90th percentile of past years</span>}
+        <span className="inline-flex items-center gap-1.5"><span className="cell-partial inline-block h-3 w-[22px] rounded-sm bg-c3" /> Partial month</span>
+        {source && <span className="inline-flex items-center gap-1.5">est. = year includes estimates (Terra 2000–02, VIIRS from 2024)</span>}
       </div>
     </div>
   )
