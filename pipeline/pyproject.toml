@@ -15,6 +15,7 @@ jangada-download = "jangada.download:main"
 jangada-aggregate = "jangada.aggregate:main"
 jangada-regions = "jangada.regions:main"
 jangada-harmonize = "jangada.harmonize:main"
+jangada-strata = "jangada.strata:main"
 jangada-export-web = "jangada.export_web:main"
 jangada-municipalities = "jangada.municipalities:main"
 

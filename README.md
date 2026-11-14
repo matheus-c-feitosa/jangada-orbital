@@ -43,7 +43,7 @@ uv run jangada-probe          # deeper test: every API source, old dates, transa
 Offline, no network and no MAP_KEY needed:
 
 ```sh
-cd pipeline && uv run pytest   # 21 passed, 6 skipped until the data is built
+cd pipeline && uv run pytest   # 24 passed, 8 skipped until the data is built (32 passed with it)
 cd web && npm test             # vitest
 ```
 
@@ -59,6 +59,7 @@ uv run jangada-download crosscheck  # checks API + border clipping against the y
 uv run jangada-aggregate            # monthly counts per 0.1° cell and satellite -> data/processed/
 uv run jangada-regions              # cell -> Brazilian state (IBGE)
 uv run jangada-harmonize            # calibration, held-out validation, harmonized series (docs/METHOD.md)
+uv run jangada-strata               # held-out error by size of the month (the table on the Method page)
 uv run jangada-export-web           # web/public/data/{manifest.json, observed.parquet, harmonized.parquet}
 uv run jangada-municipalities       # IBGE municipality outlines + search index (web/public/data/municipalities/)
 uv run pytest                       # offline unit tests + invariants of the exported data (docs/TESTING.md)
