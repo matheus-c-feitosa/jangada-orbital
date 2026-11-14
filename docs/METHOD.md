@@ -56,6 +56,19 @@ Possible improvements:
 - regions by biome;
 - fire radiative power thresholds.
 
+## Other views in the app
+
+- **This year so far:** cumulative harmonized detections since January, compared with the median and the 10th–90th
+  percentile range of all previous complete years at the same point of the year. The current month is compared pro rata,
+  counting complete days only.
+- **Fire-season rhythm:** a season year starts in the area's calmest month (lowest mean activity), so seasons that cross
+  New Year (e.g. Roraima, December–March) stay whole. Start, middle and end are the moments the season reaches 10%, 50%
+  and 90% of its detections, interpolated within the month. A shift of the start is reported only when the mean of the
+  first and last ten seasons differ by at least two weeks. For Brazil, seasons 2016/17–2025/26 started about two weeks
+  earlier than seasons 2001/02–2010/11.
+- **Density:** detections per 1,000 km². Areas are geodesic: on the WGS84 ellipsoid for Brazil and states (IBGE
+  outlines, within 0.2% of IBGE's official areas), and on a sphere for drawn shapes, circles and municipalities.
+
 ## Why stop using Aqua in 2024
 
 From 2024 the VIIRS/Aqua ratio falls from about 4.0 to 3.3–3.6, while S-NPP and NOAA-20 agree within ~3%.

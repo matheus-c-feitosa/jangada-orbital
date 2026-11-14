@@ -149,3 +149,15 @@ def test_municipality_index_matches_state_files():
         assert f.stat().st_size <= 1_000_000, uf
         doc = json.loads(f.read_text(encoding="utf-8"))
         assert {feat["properties"]["id"] for feat in doc["features"]} == expected, uf
+
+
+@pytest.mark.skipif(not SERIES.exists(), reason="run jangada-export-web first")
+def test_areas_match_ibge_official_figures():
+    """T048: densities need correct areas. IBGE official areas (2022): Brazil 8,510,345.540 km², Ceará 148,894.442 km²,
+    Amazonas 1,559,255.881 km², Distrito Federal 5,760.784 km²."""
+    areas = json.loads(SERIES.read_text(encoding="utf-8"))["areas"]
+    official = {"BR": 8_510_345.540, "CE": 148_894.442, "AM": 1_559_255.881, "DF": 5_760.784}
+    for code, km2 in official.items():
+        assert areas[code]["area_km2"] == pytest.approx(km2, rel=0.02), code
+    states = sum(a["area_km2"] for k, a in areas.items() if k != "BR")
+    assert states == pytest.approx(areas["BR"]["area_km2"], rel=0.01)

@@ -12,9 +12,9 @@
   "files": {
     "observed": {
       "path": "observed.parquet",
-      "bytes": 19297078,
+      "bytes": 19295212,
       "rows": 6444529,
-      "sha256": "3e036d6620e42ad3c0d3ac8d0f3343cee9f67e40f7c186023e2404398dca7ccb"
+      "sha256": "300a8a0aeff45c2e27882cb23c11175830f4cba7e7b6c6b123447c6fb5ed163f"
     },
     "harmonized": {
       "path": "harmonized.parquet",
@@ -24,8 +24,8 @@
     },
     "series": {
       "path": "series.json",
-      "bytes": 368936,
-      "sha256": "89e77947bbd12a773764d258ca63e06cec4189c85af278c80f1a2b5ba54e2af6"
+      "bytes": 369489,
+      "sha256": "669cba2957fba0271228ec87f01f100e9757cd594a9ddf558591899c02711b52"
     },
     "states": {
       "path": "states.geojson",

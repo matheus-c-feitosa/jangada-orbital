@@ -71,7 +71,8 @@ export function YearToDate({ months, values, lastMonth, days }: Props) {
         <span className="inline-flex items-center gap-1.5"><span className="inline-block w-5 border-t-2 border-dashed border-ink-3" /> Usual (median)</span>
         <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3 w-5 rounded-sm bg-c3/25" /> Normal range (10th–90th percentile)</span>
       </div>
-      <table className="sr-only">
+      {/* sr-only on a <table> does not clip it (tables ignore width: 1px), so the wrapper is the hidden box */}
+      <div className="sr-only"><table>
         <caption>Cumulative detections in {ytd.year} and in previous years ({range})</caption>
         <thead><tr><th scope="col">Month</th><th scope="col">{ytd.year}</th><th scope="col">Usual</th><th scope="col">Normal range</th></tr></thead>
         <tbody>
@@ -82,7 +83,7 @@ export function YearToDate({ months, values, lastMonth, days }: Props) {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </section>
   )
 }

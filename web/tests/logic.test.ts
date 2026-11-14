@@ -93,7 +93,8 @@ describe('CSV export', () => {
     expect(rows[0]).toBe('month,harmonized,harmonized_lo,harmonized_hi,source,terra_n,aqua_n,snpp_n,noaa20_n,noaa21_n,viirs_n_1km')
     expect(rows[1]).toBe('2023-12,12.3,12.3,12.3,aqua_observed,3,12,40,41,0,50')
     expect(rows[2]).toBe('2024-01,5,4,6,viirs_calibrated,0,9,,20,22,30')
-    expect(csv.split('\n').filter((l) => l.startsWith('#'))).toHaveLength(5)
+    expect(csv.split('\n').filter((l) => l.startsWith('#'))).toHaveLength(6)
+    expect(csv).toContain('# area_km2=n/a') // no area on the test series
   })
 
   test('range filter', () => {
@@ -115,5 +116,13 @@ describe('tiles', () => {
     const { tilesForBox } = await import('../src/geo/aoi')
     expect(tilesForBox({ latMin: -79, latMax: -61, lonMin: -399, lonMax: -381 }, 20)).toEqual(['-4_-20'])
     expect(tilesForBox({ latMin: -81, latMax: -79, lonMin: -401, lonMax: -399 }, 20).sort()).toEqual(['-4_-20', '-4_-21', '-5_-20', '-5_-21'].sort())
+  })
+})
+
+describe('area (T048)', () => {
+  test('a 1° x 1° box at the equator and a 30 km circle', async () => {
+    const { ringAreaKm2, circleRing } = await import('../src/geo/aoi')
+    expect(ringAreaKm2([[0, 0], [1, 0], [1, 1], [0, 1]])).toBeCloseTo(12364, -1) // sphere; ellipsoid gives ~12,309
+    expect(ringAreaKm2(circleRing(-7.23, -39.31, 30))).toBeCloseTo(Math.PI * 30 * 30, -1)
   })
 })
