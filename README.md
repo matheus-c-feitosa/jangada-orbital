@@ -45,6 +45,10 @@ cd pipeline
 uv run jangada-download all         # ~20 min: yearly files (5 min, 3.2 GB, no key) + area API (~15 min, paced)
 uv run jangada-download crosscheck  # checks API + border clipping against the yearly file (NOAA-20, Sep 2025)
 uv run jangada-aggregate            # monthly counts per 0.1° cell and satellite -> data/processed/
+uv run jangada-regions              # cell -> Brazilian state (IBGE)
+uv run jangada-harmonize            # calibration, held-out validation, harmonized series (docs/METHOD.md)
+uv run jangada-export-web           # web/public/data/{manifest.json, observed.parquet, harmonized.parquet}
+uv run pytest                       # invariants of the exported data and calibration tests
 ```
 
 The download is resumable: stop it and run it again at any time. For long runs on a remote machine:

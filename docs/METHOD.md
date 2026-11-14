@@ -1,0 +1,74 @@
+# Method: harmonized fire calendar
+
+Model version `cal-1.0`, data up to 2026-11-14. Reproduce with `uv run jangada-regions && uv run jangada-harmonize`.
+
+## Unit
+
+All values are in **Aqua-MODIS-equivalent detections per month**: the number of fire detections the Aqua MODIS
+sensor would have reported. Aqua has the longest stable record (2002–2023, afternoon overpass).
+
+## Steps
+
+1. **Points.** NASA FIRMS hotspots for Brazil, 2000-11 to today. Only vegetation fires are kept; low-confidence
+   detections are dropped (see `DATA.md`).
+2. **VIIRS pixel collapse.** One fire seen by VIIRS often covers several 375 m pixels. Detections of the same
+   overpass within the same ~1 km position (0.01°) count once, as a 1 km MODIS pixel would.
+3. **Grid.** Counts per 0.1° cell (about 11 km), month and satellite.
+4. **Regions.** Each cell is assigned to a Brazilian state by its centre (IBGE state mesh). The 776 border and
+   coastal cells whose centre falls outside every state take the nearest state.
+5. **Calibration.** One factor per state and month of the year:
+   - `factor = (Σ Aqua + M·f_national) / (Σ source + M)`, pooled over the fit years, with `M = 100` source
+     detections;
+   - states and months with few fires are therefore pulled toward the national factor of the same month;
+   - VIIRS source: S-NPP ~1 km positions, fitted on 2012–2023;
+   - early-years source: Terra detections, fitted on 2003–2012.
+6. **NOAA-20 and NOAA-21.** From 2024 the series uses the mean of NOAA-20 and NOAA-21. That mean is put on the
+   S-NPP scale with `g = 0.981`, measured over the 34 months in which all three satellites flew in full.
+7. **Series.**
+
+   | Period | Source | `source` code |
+   |---|---|---|
+   | 2000-11 to 2002-07 | Terra × factor | 1 |
+   | 2002-08 to 2023-12 | Aqua observed | 0 |
+   | 2024-01 onward | (NOAA-20 + NOAA-21)/2 × g × factor | 2 |
+
+8. **Uncertainty.** `lo` and `hi` use the 25th and 75th percentiles of the monthly ratios in the fit years, for
+   the same state and month of the year. States with fewer than 4 usable months use the national spread.
+   Observed months have `lo = hi = value`.
+
+## Validation (fit 2012–2020, held-out test 2021–2022, against Aqua observed)
+
+| Level | Mean absolute % error | Within ±20% |
+|---|---|---|
+| National, per month | 13.5% | 92% of months |
+| State, per year | 8.3% | 96% of state-years |
+| State, per month (Aqua ≥ 20 detections; 487 state-months) | 22.1% (median 14.8%) | 62% of state-months |
+
+Total bias over the test years: −2.2%.
+
+The spec target SC-003 asked for 80% of state-months within ±20%. **It is not met yet (62%).** Monthly
+state-level counts are noisy because:
+- a few large fires dominate a month;
+- the two sensors see different hours of the day.
+
+Possible improvements:
+- split day and night detections;
+- regions by biome;
+- fire radiative power thresholds.
+
+## Why stop using Aqua in 2024
+
+From 2024 the VIIRS/Aqua ratio falls from about 4.0 to 3.3–3.6, while S-NPP and NOAA-20 agree within ~3%.
+Aqua and Terra left their original orbits at the end of their missions and now cross the equator at later
+hours. Fires are more active in the afternoon, so the late Aqua overpass sees more fires. The harmonized
+series for 2024 (267k) is therefore below the observed Aqua count (300k): it estimates what the original Aqua
+orbit would have seen.
+
+## Known limitations
+
+- The diurnal cycle is strong in parts of Brazil. In Ceará, November and December, Aqua sees about 11× more
+  fires than Terra, so the Terra-scaled 2000–2002 months carry more uncertainty.
+- S-NPP data ends on 2026-11-02. The series from 2024 does not depend on it.
+- The current month is partial; the app compares it pro rata.
+- Oceanic islands are not covered by the area-API route (see `DATA.md`).
+- Cells are 0.1°, so drawn areas are approximated by the cells they touch.

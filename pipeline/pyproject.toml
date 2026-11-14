@@ -13,6 +13,9 @@ jangada-check = "jangada.check_access:main"
 jangada-probe = "jangada.probe_api:main"
 jangada-download = "jangada.download:main"
 jangada-aggregate = "jangada.aggregate:main"
+jangada-regions = "jangada.regions:main"
+jangada-harmonize = "jangada.harmonize:main"
+jangada-export-web = "jangada.export_web:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -20,3 +23,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jangada"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

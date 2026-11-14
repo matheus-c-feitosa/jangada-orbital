@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "data_version": "2026-11-14",
+  "data_date": "2026-11-14",
+  "model_version": "cal-1.0",
+  "unit": "Aqua-MODIS-equivalent detections per month",
+  "grid_deg": 0.1,
+  "first_month": "2000-11-01",
+  "last_month": "2026-11-01",
+  "last_month_days": 14,
+  "files": {
+    "observed": {
+      "path": "observed.parquet",
+      "bytes": 14356399,
+      "rows": 6444529,
+      "sha256": "fee31bdc12b31ac3a9e797a35942faff6272b77256aab6580e4a0c330233c818"
+    },
+    "harmonized": {
+      "path": "harmonized.parquet",
+      "bytes": 8151570,
+      "rows": 2003427,
+      "sha256": "43d8a7ded2bda2c8f52cf405d43d53c962a2bfd8a9913793257d7703d42eadd8"
+    }
+  },
+  "satellites": [
+    "Terra",
+    "Aqua",
+    "S-NPP",
+    "NOAA-20",
+    "NOAA-21"
+  ],
+  "sources": {
+    "0": "aqua_observed",
+    "1": "terra_scaled",
+    "2": "viirs_calibrated"
+  },
+  "segments": {
+    "terra_scaled": "2000-11..2002-08 (exclusive)",
+    "aqua_observed": "2002-08..2023-12",
+    "viirs_calibrated": "2024-01.."
+  },
+  "validation": {
+    "heldout_years": "2021-2022",
+    "mape_state": 0.2205,
+    "share_within_20pct": 0.6181,
+    "mape_national_month": 0.1347,
+    "share_within_20pct_state_year": 0.963
+  }
+}
