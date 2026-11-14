@@ -60,6 +60,7 @@ uv run jangada-aggregate            # monthly counts per 0.1° cell and satellit
 uv run jangada-regions              # cell -> Brazilian state (IBGE)
 uv run jangada-harmonize            # calibration, held-out validation, harmonized series (docs/METHOD.md)
 uv run jangada-export-web           # web/public/data/{manifest.json, observed.parquet, harmonized.parquet}
+uv run jangada-municipalities       # IBGE municipality outlines + search index (web/public/data/municipalities/)
 uv run pytest                       # offline unit tests + invariants of the exported data (docs/TESTING.md)
 ```
 

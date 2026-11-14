@@ -127,3 +127,25 @@ def test_tiles_partition_the_big_files(con):
                             WHERE regexp_extract(filename, 'h_(-?\\d+)_(-?\\d+)', 1)::INT <> floor(cell_lat / 20)
                                OR regexp_extract(filename, 'h_(-?\\d+)_(-?\\d+)', 2)::INT <> floor(cell_lon / 20)""").fetchone()[0]
     assert wrong == 0
+
+
+MUNICIPALITIES = WEB_DATA / "municipalities"
+
+
+@pytest.mark.skipif(not (MUNICIPALITIES / "index.json").exists(), reason="run jangada-municipalities first")
+def test_municipality_index_matches_state_files():
+    index = json.loads((MUNICIPALITIES / "index.json").read_text(encoding="utf-8"))
+    assert len(index) > 5500
+    ids = [row[0] for row in index]
+    assert len(ids) == len(set(ids))
+    by_state: dict[str, set[str]] = {}
+    for mid, name, uf, w, s, e, n in index:
+        assert name and len(mid) == 7 and mid.startswith(tuple("12345"))
+        assert -74.5 <= w <= e <= -28 and -34.5 <= s <= n <= 5.5, (mid, name)
+        by_state.setdefault(uf, set()).add(mid)
+    assert len(by_state) == 27
+    for uf, expected in by_state.items():
+        f = MUNICIPALITIES / f"{uf}.geojson"
+        assert f.stat().st_size <= 1_000_000, uf
+        doc = json.loads(f.read_text(encoding="utf-8"))
+        assert {feat["properties"]["id"] for feat in doc["features"]} == expected, uf
