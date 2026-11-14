@@ -111,3 +111,19 @@ def test_series_matches_parquet_and_states_add_up(con):
         for i, m in enumerate(months):
             v = br["observed"][s][i]
             assert v == observed.get((m, s)), (s, m)
+
+
+@pytest.mark.skipif(not (WEB_DATA / "tiles").exists(), reason="run jangada-export-web first")
+def test_tiles_partition_the_big_files(con):
+    """The browser reads tiles; together they must hold exactly the rows of the published big files."""
+    m = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    tiles = WEB_DATA / "tiles"
+    assert len(list(tiles.glob("h_*.parquet"))) == len(m["tiles"]["ids"]) == len(list(tiles.glob("o_*.parquet")))
+    for kind, big in (("h", HARMONIZED), ("o", OBSERVED)):
+        a = con.execute(f"SELECT count(*), sum(cell_lat::BIGINT * 1000 + cell_lon) FROM '{tiles}/{kind}_*.parquet'").fetchone()
+        b = con.execute(f"SELECT count(*), sum(cell_lat::BIGINT * 1000 + cell_lon) FROM '{big}'").fetchone()
+        assert a == b, kind
+    wrong = con.execute(f"""SELECT count(*) FROM read_parquet('{tiles}/h_*.parquet', filename = true)
+                            WHERE regexp_extract(filename, 'h_(-?\\d+)_(-?\\d+)', 1)::INT <> floor(cell_lat / 20)
+                               OR regexp_extract(filename, 'h_(-?\\d+)_(-?\\d+)', 2)::INT <> floor(cell_lon / 20)""").fetchone()[0]
+    assert wrong == 0

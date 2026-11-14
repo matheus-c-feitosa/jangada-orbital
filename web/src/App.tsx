@@ -72,7 +72,7 @@ export function App() {
     let cancelled = false
     setAreaLoading(true)
     setAreaError(null)
-    seriesForRing(area.ring, area.label, data.areas.BR)
+    seriesForRing(area.ring, area.label, data.areas.BR, data.manifest)
       .then((s) => { if (!cancelled) setRingSeries(s) })
       .catch((e: Error) => { if (!cancelled) setAreaError(`Could not load this area (${e.message}).`) })
       .finally(() => { if (!cancelled) setAreaLoading(false) })

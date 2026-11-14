@@ -56,6 +56,15 @@ export function circleRing(lat: number, lon: number, km: number, vertices = 64):
   return ring
 }
 
+/** Tile ids "<ty>_<tx>" (tiles of `tileCells` cells, 20 = 2°) that a cell box touches. */
+export function tilesForBox(box: CellBox, tileCells: number): string[] {
+  const ids: string[] = []
+  for (let ty = Math.floor(box.latMin / tileCells); ty <= Math.floor(box.latMax / tileCells); ty++) {
+    for (let tx = Math.floor(box.lonMin / tileCells); tx <= Math.floor(box.lonMax / tileCells); tx++) ids.push(`${ty}_${tx}`)
+  }
+  return ids
+}
+
 export function ringBounds(ring: Ring): [number, number, number, number] {
   const lons = ring.map((p) => p[0])
   const lats = ring.map((p) => p[1])

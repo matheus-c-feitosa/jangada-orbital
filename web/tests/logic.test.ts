@@ -109,3 +109,11 @@ describe('noise floor', () => {
     expect(compareMonth(months, values, 11, 30).unusual).toBe(false)
   })
 })
+
+describe('tiles', () => {
+  test('a box inside one 2-degree tile needs one tile; a box across a corner needs four', async () => {
+    const { tilesForBox } = await import('../src/geo/aoi')
+    expect(tilesForBox({ latMin: -79, latMax: -61, lonMin: -399, lonMax: -381 }, 20)).toEqual(['-4_-20'])
+    expect(tilesForBox({ latMin: -81, latMax: -79, lonMin: -401, lonMax: -399 }, 20).sort()).toEqual(['-4_-20', '-4_-21', '-5_-20', '-5_-21'].sort())
+  })
+})

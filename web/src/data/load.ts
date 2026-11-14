@@ -15,6 +15,8 @@ export interface Manifest {
   last_month_days: number
   /** the last data day is still arriving (not counted in last_month_days) */
   last_day_partial?: boolean
+  /** browser tiles: 2° x 2° Parquet files fetched whole (GitHub Pages gzip breaks range requests) */
+  tiles: { path: string; deg: number; cells: number; ids: string[] }
   validation: {
     heldout_years: string
     mape_state: number

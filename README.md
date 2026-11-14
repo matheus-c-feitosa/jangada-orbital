@@ -65,8 +65,10 @@ npm run build      # typecheck + static build in web/dist (deployed to GitHub Pa
 ```
 
 Stack: React, Vite, TypeScript, MapLibre GL (OpenFreeMap basemap, © OpenStreetMap contributors), terra-draw, hyparquet.
-Brazil and the 27 states load from `series.json`; drawn areas read only the Parquet row groups they need over HTTP
-range requests. No server, no login, no API key in the browser.
+Brazil and the 27 states load from `series.json`. Drawn areas fetch only the 2° × 2° tiles they touch
+(`web/public/data/tiles/`, a few hundred KB; GitHub Pages gzips `.parquet`, which rules out HTTP range requests).
+The full harmonized and observed datasets stay downloadable as `web/public/data/*.parquet`. No server, no login,
+no API key in the browser.
 
 ## NASA data
 

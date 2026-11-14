@@ -1,23 +1,23 @@
-// Monthly series for a drawn area: reads only the Parquet row groups that can hold its cells (HTTP range requests).
-import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects, type AsyncBuffer, type FileMetaData } from 'hyparquet'
-import { SATELLITES, dataUrl, type AreaSeries, type Satellite } from './load'
-import { cellKey, cellsInRing, type Ring } from '../geo/aoi'
+// Monthly series for a drawn area. The browser fetches whole 2° x 2° tile files (web/public/data/tiles/), not byte
+// ranges: GitHub Pages gzips .parquet responses, and gzip breaks HTTP range requests on the original file.
+import { parquetReadObjects } from 'hyparquet'
+import { SATELLITES, dataUrl, type AreaSeries, type Manifest, type Satellite } from './load'
+import { cellKey, cellsInRing, tilesForBox, type Ring } from '../geo/aoi'
 
-interface Opened {
-  file: AsyncBuffer
-  metadata: FileMetaData
-}
-const opened = new Map<string, Promise<Opened>>()
+const cache = new Map<string, Promise<Record<string, unknown>[]>>()
 
-function open(name: string): Promise<Opened> {
-  let p = opened.get(name)
+/** Rows of one tile file; a tile listed in the manifest always exists. */
+function readTile(kind: 'h' | 'o', id: string): Promise<Record<string, unknown>[]> {
+  const key = `${kind}_${id}`
+  let p = cache.get(key)
   if (!p) {
     p = (async () => {
-      const file = await asyncBufferFromUrl({ url: dataUrl(name) })
-      return { file, metadata: await parquetMetadataAsync(file) }
+      const response = await fetch(dataUrl(`tiles/${key}.parquet`))
+      if (!response.ok) throw new Error(`tile ${key}: HTTP ${response.status}`)
+      return parquetReadObjects({ file: await response.arrayBuffer() })
     })()
-    p.catch(() => opened.delete(name))
-    opened.set(name, p)
+    p.catch(() => cache.delete(key))
+    cache.set(key, p)
   }
   return p
 }
@@ -31,7 +31,12 @@ const monthKey = (d: unknown) => {
  * Builds the series for the cells inside `ring`, aligned to Brazil's months (`template`).
  * Observed values stay null where the satellite was not flying anywhere in Brazil that month.
  */
-export async function seriesForRing(ring: Ring, name: string, template: AreaSeries): Promise<AreaSeries & { cells: number }> {
+export async function seriesForRing(
+  ring: Ring,
+  name: string,
+  template: AreaSeries,
+  manifest: Manifest,
+): Promise<AreaSeries & { cells: number }> {
   const { cells, box } = cellsInRing(ring)
   const months = template.months
   const index = new Map(months.map((m, i) => [m, i]))
@@ -50,16 +55,13 @@ export async function seriesForRing(ring: Ring, name: string, template: AreaSeri
     cells: cells.size,
   }
   if (!box) return out
-  const filter = {
-    cell_lat: { $gte: box.latMin, $lte: box.latMax },
-    cell_lon: { $gte: box.lonMin, $lte: box.lonMax },
-  }
-  const [harmonized, observed] = await Promise.all([open('harmonized.parquet'), open('observed.parquet')])
-  const [hRows, oRows] = await Promise.all([
-    parquetReadObjects({ ...harmonized, columns: ['cell_lat', 'cell_lon', 'month', 'value', 'lo', 'hi'], filter }),
-    parquetReadObjects({ ...observed, columns: ['cell_lat', 'cell_lon', 'month', 'satellite', 'n', 'n_1km'], filter }),
+  const available = new Set(manifest.tiles.ids)
+  const ids = tilesForBox(box, manifest.tiles.cells).filter((id) => available.has(id))
+  const [hTiles, oTiles] = await Promise.all([
+    Promise.all(ids.map((id) => readTile('h', id))),
+    Promise.all(ids.map((id) => readTile('o', id))),
   ])
-  for (const r of hRows) {
+  for (const r of hTiles.flat()) {
     if (!cells.has(cellKey(Number(r.cell_lat), Number(r.cell_lon)))) continue
     const i = index.get(monthKey(r.month))
     if (i === undefined) continue
@@ -67,7 +69,7 @@ export async function seriesForRing(ring: Ring, name: string, template: AreaSeri
     out.lo[i] += Number(r.lo)
     out.hi[i] += Number(r.hi)
   }
-  for (const r of oRows) {
+  for (const r of oTiles.flat()) {
     if (!cells.has(cellKey(Number(r.cell_lat), Number(r.cell_lon)))) continue
     const i = index.get(monthKey(r.month))
     if (i === undefined) continue

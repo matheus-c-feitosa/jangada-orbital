@@ -4,8 +4,10 @@
                                                   observed.parquet, harmonized.parquet}
 
 Files are sorted by (cell_lat, cell_lon, month) with ~100k-row groups, so the browser fetches only the row groups
-an area needs (HTTP range requests, read in the browser with hyparquet; Snappy compression, which hyparquet decodes
-without extra codecs). Each file must stay at or under 50 MB.
+an area needs; Snappy compression, which hyparquet decodes without extra codecs. Each file must stay at or under 50 MB.
+GitHub Pages gzips .parquet responses, which breaks HTTP range requests, so the browser reads tiles/ instead:
+one small Parquet per 2° x 2° tile and kind (h = harmonized, o = observed), fetched whole. The two big files stay
+published as the downloadable dataset.
 series.json precomputes Brazil and the 27 states, so the first screen and the state picker need no Parquet at all.
 """
 
@@ -26,6 +28,7 @@ WEB_DATA = config.ROOT / "web" / "public" / "data"
 SCHEMA = 1
 MAX_BYTES = 50 * 1024 * 1024
 ROW_GROUP = 100_000
+TILE_CELLS = 20  # 2 degrees = 20 cells of 0.1 degree
 SATELLITES = ["Terra", "Aqua", "S-NPP", "NOAA-20", "NOAA-21"]  # index = code in observed.parquet
 VIIRS = ("S-NPP", "NOAA-20", "NOAA-21")
 UF_NAMES = {
@@ -80,6 +83,26 @@ def write_series(con, cells, harmonized, regions, out) -> dict:
            "satellites": SATELLITES, "areas": areas}
     out.write_text(json.dumps(doc, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
     return doc
+
+
+def write_tiles(con, cells, harmonized, codes) -> list[str]:
+    """One harmonized and one observed Parquet per 2-degree tile; returns the tile ids "<ty>_<tx>"."""
+    out = WEB_DATA / "tiles"
+    if out.exists():
+        for f in out.glob("*.parquet"):
+            f.unlink()
+    out.mkdir(parents=True, exist_ok=True)
+    ids = con.execute(f"""SELECT DISTINCT floor(cell_lat / {TILE_CELLS})::INT, floor(cell_lon / {TILE_CELLS})::INT
+                          FROM '{cells}' ORDER BY 1, 2""").fetchall()
+    for ty, tx in ids:
+        where = f"floor(cell_lat / {TILE_CELLS}) = {ty} AND floor(cell_lon / {TILE_CELLS}) = {tx}"
+        con.execute(f"""COPY (SELECT cell_lat::SMALLINT AS cell_lat, cell_lon::SMALLINT AS cell_lon, month,
+                                     (CASE satellite {codes} END)::TINYINT AS satellite, n::INTEGER AS n, n_1km::INTEGER AS n_1km
+                              FROM '{cells}' WHERE {where} ORDER BY cell_lat, cell_lon, month)
+                        TO '{out}/o_{ty}_{tx}.parquet' (FORMAT parquet, COMPRESSION snappy)""")
+        con.execute(f"""COPY (SELECT * FROM '{harmonized}' WHERE {where} ORDER BY cell_lat, cell_lon, month)
+                        TO '{out}/h_{ty}_{tx}.parquet' (FORMAT parquet, COMPRESSION snappy)""")
+    return [f"{ty}_{tx}" for ty, tx in ids]
 
 
 def write_states(con, out) -> int:
@@ -142,6 +165,10 @@ def main() -> int:
         entries[name] = {"path": out.name, "bytes": size, "rows": rows, "sha256": sha256(out)}
         log(f"{out.name}: {rows:,} rows, {size / 1e6:.1f} MB")
 
+    tiles = write_tiles(con, cells, harmonized, codes)
+    tiles_info = {"path": "tiles/", "deg": TILE_CELLS / 10, "cells": TILE_CELLS, "ids": tiles}
+    log(f"tiles/: {len(tiles)} tiles x 2 files")
+
     regions = config.PROCESSED / "cell_region.parquet"
     if not regions.exists():
         sys.exit("missing cell_region.parquet: run `uv run jangada-regions` first")
@@ -175,6 +202,7 @@ def main() -> int:
         else days_in_month,
         "last_day_partial": last_day_partial,
         "files": entries,
+        "tiles": tiles_info,
         "satellites": SATELLITES,
         "sources": {"0": "aqua_observed", "1": "terra_scaled", "2": "viirs_calibrated"},
         "segments": report["segments"],
