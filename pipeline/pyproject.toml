@@ -27,4 +27,10 @@ packages = ["src/jangada"]
 [dependency-groups]
 dev = [
     "pytest>=9.2.0",
+    "pytest-cov>=5.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"

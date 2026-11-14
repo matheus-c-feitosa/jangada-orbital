@@ -9,10 +9,16 @@ data/*
 __pycache__/
 *.pyc
 .venv/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # web
 node_modules/
 dist/
+coverage/
+test-results/
+playwright-report/
 
 # os / editors
 .DS_Store

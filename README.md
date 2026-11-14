@@ -38,6 +38,18 @@ uv run jangada-check          # checks the key, FIRMS products and dates, yearly
 uv run jangada-probe          # deeper test: every API source, old dates, transaction cost (~80 transactions)
 ```
 
+## Tests
+
+Offline, no network and no MAP_KEY needed:
+
+```sh
+cd pipeline && uv run pytest   # 21 passed, 6 skipped until the data is built
+cd web && npm test             # vitest
+```
+
+See [`docs/TESTING.md`](docs/TESTING.md) for the three test layers, Playwright, and the from-scratch
+reproducibility check (not yet run on a second machine).
+
 ## Data pipeline
 
 ```sh
@@ -48,7 +60,7 @@ uv run jangada-aggregate            # monthly counts per 0.1° cell and satellit
 uv run jangada-regions              # cell -> Brazilian state (IBGE)
 uv run jangada-harmonize            # calibration, held-out validation, harmonized series (docs/METHOD.md)
 uv run jangada-export-web           # web/public/data/{manifest.json, observed.parquet, harmonized.parquet}
-uv run pytest                       # invariants of the exported data and calibration tests
+uv run pytest                       # offline unit tests + invariants of the exported data (docs/TESTING.md)
 ```
 
 The download is resumable: stop it and run it again at any time. For long runs on a remote machine:
@@ -61,6 +73,7 @@ cd web
 npm ci
 npm run dev        # http://localhost:5173 (reads web/public/data, produced by jangada-export-web)
 npm test           # vitest: area → cells, month comparison, CSV
+npm run e2e        # playwright: built site, calendar, CSV download, Method page (outside hosts blocked)
 npm run build      # typecheck + static build in web/dist (deployed to GitHub Pages by .github/workflows/pages.yml)
 ```
 
