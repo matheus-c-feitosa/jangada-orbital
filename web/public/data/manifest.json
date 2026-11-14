@@ -7,19 +7,30 @@
   "grid_deg": 0.1,
   "first_month": "2000-11-01",
   "last_month": "2026-11-01",
-  "last_month_days": 14,
+  "last_month_days": 13,
+  "last_day_partial": true,
   "files": {
     "observed": {
       "path": "observed.parquet",
-      "bytes": 14356399,
+      "bytes": 19305088,
       "rows": 6444529,
-      "sha256": "fee31bdc12b31ac3a9e797a35942faff6272b77256aab6580e4a0c330233c818"
+      "sha256": "d758521ebba6583f2a909488af81593fdfd8e5df550b5e15e69573174667d23a"
     },
     "harmonized": {
       "path": "harmonized.parquet",
-      "bytes": 8151570,
+      "bytes": 9905313,
       "rows": 2003427,
-      "sha256": "43d8a7ded2bda2c8f52cf405d43d53c962a2bfd8a9913793257d7703d42eadd8"
+      "sha256": "b2f22a7e98c3de8dbdad5acc26dc21d77626e3148f79a16a3d622f0b1b7feb5f"
+    },
+    "series": {
+      "path": "series.json",
+      "bytes": 368936,
+      "sha256": "89e77947bbd12a773764d258ca63e06cec4189c85af278c80f1a2b5ba54e2af6"
+    },
+    "states": {
+      "path": "states.geojson",
+      "bytes": 187400,
+      "sha256": "0ad8a6f8ac83c22dbe848241eef6367a3315a8d38f79c94f3419d8c97dbb09e7"
     }
   },
   "satellites": [

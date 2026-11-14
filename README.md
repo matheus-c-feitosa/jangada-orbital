@@ -54,6 +54,20 @@ uv run pytest                       # invariants of the exported data and calibr
 The download is resumable: stop it and run it again at any time. For long runs on a remote machine:
 `setsid nohup uv run jangada-download all > ../data/download.log 2>&1 &`.
 
+## Web app
+
+```sh
+cd web
+npm ci
+npm run dev        # http://localhost:5173 (reads web/public/data, produced by jangada-export-web)
+npm test           # vitest: area → cells, month comparison, CSV
+npm run build      # typecheck + static build in web/dist (deployed to GitHub Pages by .github/workflows/pages.yml)
+```
+
+Stack: React, Vite, TypeScript, MapLibre GL (OpenFreeMap basemap, © OpenStreetMap contributors), terra-draw, hyparquet.
+Brazil and the 27 states load from `series.json`; drawn areas read only the Parquet row groups they need over HTTP
+range requests. No server, no login, no API key in the browser.
+
 ## NASA data
 
 NASA FIRMS active fire / hotspot data: MODIS Collection 6.1 and VIIRS 375 m (S-NPP, NOAA-20, NOAA-21).

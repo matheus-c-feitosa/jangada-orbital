@@ -85,3 +85,29 @@ def test_manifest_matches_contract():
         path = WEB_DATA / entry["path"]
         assert path.stat().st_size == entry["bytes"] <= MAX_BYTES
         assert hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"]
+
+
+SERIES = WEB_DATA / "series.json"
+
+
+@pytest.mark.skipif(not SERIES.exists(), reason="run jangada-export-web first")
+def test_series_matches_parquet_and_states_add_up(con):
+    doc = json.loads(SERIES.read_text(encoding="utf-8"))
+    months, areas = doc["months"], doc["areas"]
+    assert len(areas) == 28 and "BR" in areas
+    br = areas["BR"]
+    for key in ("value", "lo", "hi", "viirs_k"):
+        assert all(len(a[key]) == len(months) for a in areas.values())
+    # Brazil harmonized equals the Parquet total for every month (within rounding of 1 decimal per area).
+    totals = dict(con.execute(f"""SELECT strftime(month, '%Y-%m'), sum(value) FROM '{HARMONIZED}' GROUP BY 1""").fetchall())
+    for i, m in enumerate(months):
+        assert br["value"][i] == pytest.approx(totals.get(m, 0.0), abs=1.0), m
+        states = sum(a["value"][i] for k, a in areas.items() if k != "BR")
+        assert states == pytest.approx(br["value"][i], abs=3.0), m
+    # Observed: Brazil per satellite equals the aggregation; null only where the satellite never flew that month.
+    observed = {(m, s): n for m, s, n in con.execute(
+        f"SELECT strftime(month, '%Y-%m'), satellite, sum(n) FROM '{CELLS}' GROUP BY ALL").fetchall()}
+    for s in SATELLITES:
+        for i, m in enumerate(months):
+            v = br["observed"][s][i]
+            assert v == observed.get((m, s)), (s, m)
