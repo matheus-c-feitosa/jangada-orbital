@@ -37,7 +37,8 @@ function useMediaQuery(query: string): boolean {
 }
 
 function usePage(): ['calendar' | 'method', (p: 'calendar' | 'method') => void] {
-  const read = () => (window.location.hash === '#method' ? 'method' : 'calendar')
+  // #why is the harmonization explainer inside the Method page (linked from the answer line)
+  const read = () => (['#method', '#why'].includes(window.location.hash) ? 'method' : 'calendar')
   const [page, setPage] = useState<'calendar' | 'method'>(read)
   useEffect(() => {
     const onHash = () => setPage(read())
@@ -175,7 +176,7 @@ export function App() {
       </header>
 
       {page === 'method' ? (
-        <Method manifest={data?.manifest ?? null} repo={REPO} />
+        <Method manifest={data?.manifest ?? null} repo={REPO} brazil={data?.areas.BR ?? null} />
       ) : loadError ? (
         <main className="p-6" role="alert">
           <p className="text-ink-2">The fire data could not be loaded ({loadError}).</p>

@@ -40,6 +40,18 @@ test('the Method page opens from the navigation', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'How the harmonized calendar is made' })).toBeVisible()
 })
 
+test('"Why these numbers?" opens the harmonization chart and its table', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('link', { name: 'Why these numbers?' }).click({ timeout: 30_000 })
+  const why = page.getByRole('region', { name: 'Why these numbers?' })
+  await expect(why.getByRole('img', { name: /Yearly fire detections in Brazil/ })).toBeVisible()
+  await expect(why.getByText(/VIIRS counts about \d+× more hotspots than Aqua/)).toBeVisible()
+  await why.getByText('Show the numbers').click()
+  const table = why.getByRole('table', { name: /Yearly fire detections in Brazil/ })
+  await expect(table.getByRole('rowheader', { name: '2012' })).toBeVisible()
+  await expect(table.getByRole('columnheader')).toHaveCount(4)
+})
+
 test('drawing a rectangle on the map loads that area', async ({ page }) => {
   await page.goto('./')
   await expect(page.getByRole('button', { name: 'Download CSV' })).toBeEnabled({ timeout: 30_000 })

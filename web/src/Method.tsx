@@ -1,9 +1,10 @@
-import type { Manifest } from './data/load'
+import type { AreaSeries, Manifest } from './data/load'
+import { Explainer } from './pages/Explainer'
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
 
 /** Method page (FR-012): sources, unit, calibration, measured error and limitations. Source: docs/METHOD.md. */
-export function Method({ manifest, repo }: { manifest: Manifest | null; repo: string }) {
+export function Method({ manifest, repo, brazil }: { manifest: Manifest | null; repo: string; brazil: AreaSeries | null }) {
   const v = manifest?.validation
   return (
     <main className="mx-auto max-w-[72ch] px-6 pt-8 pb-16 [&_a]:text-ink [&_a]:underline [&_h1]:mb-3 [&_h1]:text-[30px] [&_h1]:font-semibold [&_h1]:tracking-[-0.02em] [&_h2]:mt-8 [&_h2]:mb-2 [&_h2]:text-[19px] [&_h2]:font-semibold [&_li]:text-ink-2 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-6 [&_p]:my-3 [&_p]:text-ink-2 [&_strong]:text-ink [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-6">
@@ -13,6 +14,7 @@ export function Method({ manifest, repo }: { manifest: Manifest | null; repo: st
         times more hotspots over Brazil, so their raw counts cannot be compared across years. We convert every month to one
         unit: <strong>Aqua-MODIS-equivalent detections</strong>, the count the Aqua satellite would have reported.
       </p>
+      <Explainer brazil={brazil} manifest={manifest} />
       <h2>Steps</h2>
       <ol>
         <li>NASA FIRMS hotspots for Brazil, November 2000 to {manifest?.data_date ?? 'today'}: vegetation fires only, low-confidence detections removed.</li>

@@ -56,6 +56,7 @@ export function AnswerLine({ areaName, comparison: c, loading, cells, lastDayPar
           {c.partial ? '' : ` · ${monthName} ${y}: ${density.format((c.value / areaKm2) * 1000)}`}
         </p>
       ) : null}
+      <a href="#why" className="w-fit text-sm text-ink-2 underline underline-offset-[3px] hover:text-ink">Why these numbers?</a>
       {c.unusual ? (
         <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-current px-2.5 py-1 text-sm font-semibold text-unusual"><AlertTriangle size={16} aria-hidden="true" /> Unusual: above the 90th percentile of past {monthName}s</span>
       ) : (
