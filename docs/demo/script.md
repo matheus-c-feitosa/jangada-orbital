@@ -19,7 +19,7 @@ Submission closes Sunday Nov 15, 23:59 Fortaleza time.
 | `[APP URL]` | Public address of the deployed app |
 | `[DEMO AREA]` | The area drawn in shot 4, chosen in rehearsal (see "What to record") |
 
-The project name is **Jangada Orbital**, the same as the team name. It must match the "Project Name" field on the
+The project name is **Jangada Orbital: Harmonized Fire Calendar** (team name: Jangada Orbital). It must match the "Project Name" field on the
 project page.
 
 ## Script
@@ -181,7 +181,7 @@ Decided by the script:
 To tick on the final file, before pasting the link into the project page:
 
 - [ ] Placeholders filled: member names, app URL, demo area
-- [ ] "Project Name" on the project page reads "Jangada Orbital", as in the video
+- [ ] "Project Name" on the project page reads "Jangada Orbital: Harmonized Fire Calendar", as in the video
 - [ ] Final file is 30 s or less (`ffprobe`), and YouTube shows 0:30 or less
 - [ ] English subtitles are burned in and readable at phone size
 - [ ] Link opens in a private window with no login, on a device that never opened it
