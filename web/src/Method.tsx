@@ -31,6 +31,17 @@ export function Method({ manifest, repo }: { manifest: Manifest | null; repo: st
           <tr><td>State, per month</td><td>{v ? pct(v.share_within_20pct) : '…'} of state-months (mean error {v ? pct(v.mape_state) : '…'})</td></tr>
         </tbody>
       </table>
+      <h2>Other views</h2>
+      <ul>
+        <li><strong>This year so far:</strong> cumulative harmonized detections since January against the median and the
+          10th–90th percentile range of all previous complete years at the same point of the year. The current month is
+          compared pro rata (complete days only).</li>
+        <li><strong>Fire-season rhythm:</strong> a season year starts in the area's calmest month, so seasons that cross New
+          Year stay whole. Start, middle and end are the moments the season reaches 10%, 50% and 90% of its detections. A
+          change of the start is stated only when the first and last ten seasons differ by at least two weeks.</li>
+        <li><strong>Density:</strong> detections per 1,000 km², using the geodesic area of the selection (IBGE outlines for
+          Brazil and states, the drawn shape otherwise), so areas of different sizes can be compared.</li>
+      </ul>
       <h2>Limitations</h2>
       <ul>
         <li>Values from 2024 and before August 2002 are estimates; the calendar marks those years with “est.” and the CSV includes the observed counts of every satellite.</li>

@@ -18,6 +18,9 @@ test('the calendar for Brazil loads from the static data files', async ({ page }
   await expect(calendar).toBeVisible()
   await expect(calendar.getByRole('rowheader', { name: /^2001/ })).toBeVisible()
   await expect(calendar.getByRole('columnheader')).toHaveCount(12)
+  await expect(page.getByRole('heading', { level: 2, name: /so far$/ })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Fire-season rhythm' })).toBeVisible()
+  await expect(page.getByText(/detections per 1,000 km²/)).toBeVisible()
 })
 
 test('the CSV download holds the monthly series', async ({ page }) => {
