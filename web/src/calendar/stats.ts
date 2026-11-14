@@ -29,7 +29,10 @@ export interface MonthComparison {
   rank: number
   of: number
   unusual: boolean
+  /** well below the usual for this month: under the 10th percentile, in a month that usually has real activity */
+  quiet: boolean
   p90: number
+  p10: number
 }
 
 export const daysIn = (month: string) => {
@@ -53,6 +56,7 @@ export function compareMonth(months: string[], values: number[], t: number, days
   const expected = (med * days) / dim
   const pace = (value * dim) / Math.max(days, 1)
   const p90 = quantile(sorted, 0.9)
+  const p10 = quantile(sorted, 0.1)
   return {
     month,
     value,
@@ -65,7 +69,11 @@ export function compareMonth(months: string[], values: number[], t: number, days
     rank: 1 + history.filter((v) => v > pace).length,
     of: history.length + 1,
     unusual: history.length >= 5 && pace > p90 && pace >= MIN_UNUSUAL,
+    // The same "normal range" (10th to 90th percentile) the year-to-date chart draws; a month that usually has under
+    // MIN_UNUSUAL detections is too small for "quiet" to mean anything.
+    quiet: history.length >= 5 && pace < p10 && med >= MIN_UNUSUAL,
     p90,
+    p10,
   }
 }
 

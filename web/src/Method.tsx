@@ -2,11 +2,24 @@ import type { Manifest } from './data/load'
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
 
+const TABLE = 'my-2 border-collapse tabular-nums [&_td]:border-b [&_td]:border-line [&_td]:py-1.5 [&_td]:pr-5 [&_th]:border-b [&_th]:border-line [&_th]:py-1.5 [&_th]:pr-5 [&_th]:text-left [&_th]:font-medium'
+
+// From data/processed/harmonize_report.json (`share_within_20pct_national_month`); the manifest does not carry it.
+const NATIONAL_MONTHS_WITHIN = '92%'
+
+// Same held-out test, split by the size of the month. Source: `uv run jangada-strata` (docs/METHOD.md), 2026-11-14.
+const BY_SIZE = [
+  { size: '20–49', months: 93, within: '53%', error: '28%', bias: '+8%' },
+  { size: '50–99', months: 87, within: '48%', error: '29%', bias: '+14%' },
+  { size: '100–499', months: 170, within: '61%', error: '22%', bias: '+2%' },
+  { size: '500 or more', months: 137, within: '78%', error: '13%', bias: '−3%' },
+]
+
 /** Method page (FR-012): sources, unit, calibration, measured error and limitations. Source: docs/METHOD.md. */
 export function Method({ manifest, repo }: { manifest: Manifest | null; repo: string }) {
   const v = manifest?.validation
   return (
-    <main className="mx-auto max-w-[72ch] px-6 pt-8 pb-16 [&_a]:text-ink [&_a]:underline [&_h1]:mb-3 [&_h1]:text-[30px] [&_h1]:font-semibold [&_h1]:tracking-[-0.02em] [&_h2]:mt-8 [&_h2]:mb-2 [&_h2]:text-[19px] [&_h2]:font-semibold [&_li]:text-ink-2 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-6 [&_p]:my-3 [&_p]:text-ink-2 [&_strong]:text-ink [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-6">
+    <main id="main" tabIndex={-1} className="mx-auto max-w-[72ch] px-6 pt-8 pb-16 outline-none [&_a]:text-ink [&_a]:underline [&_h1]:mb-3 [&_h1]:text-[30px] [&_h1]:font-semibold [&_h1]:tracking-[-0.02em] [&_h2]:mt-8 [&_h2]:mb-2 [&_h2]:text-[19px] [&_h2]:font-semibold [&_li]:text-ink-2 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-6 [&_p]:my-3 [&_p]:text-ink-2 [&_strong]:text-ink [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-6">
       <h1>How the harmonized calendar is made</h1>
       <p>
         NASA's MODIS (1 km, since 2000) and VIIRS (375 m, since 2012) sensors detect active fires, but VIIRS sees about six
@@ -23,14 +36,34 @@ export function Method({ manifest, repo }: { manifest: Manifest | null; repo: st
       </ol>
       <h2>Measured error</h2>
       <p>Fitted on 2012–2020 and tested on {v?.heldout_years ?? '2021–2022'}, years the model never saw:</p>
-      <table className="my-2 border-collapse tabular-nums [&_td]:border-b [&_td]:border-line [&_td]:py-1.5 [&_td]:pr-6 [&_th]:border-b [&_th]:border-line [&_th]:py-1.5 [&_th]:pr-6 [&_th]:text-left [&_th]:font-medium">
+      <div className="overflow-x-auto"><table className={TABLE}>
         <thead><tr><th scope="col">Level</th><th scope="col">Within ±20%</th></tr></thead>
         <tbody>
-          <tr><td>Brazil, per month</td><td>{v ? `mean error ${pct(v.mape_national_month)}` : '…'}</td></tr>
+          <tr><td>Brazil, per month</td><td>{NATIONAL_MONTHS_WITHIN} of months (mean error {v ? pct(v.mape_national_month) : '…'})</td></tr>
           <tr><td>State, per year</td><td>{v ? pct(v.share_within_20pct_state_year) : '…'} of state-years</td></tr>
           <tr><td>State, per month</td><td>{v ? pct(v.share_within_20pct) : '…'} of state-months (mean error {v ? pct(v.mape_state) : '…'})</td></tr>
         </tbody>
-      </table>
+      </table></div>
+      <p>
+        The error depends on how many fires the month has. The same test, split by the Aqua detections in the state-month:
+      </p>
+      <div className="overflow-x-auto"><table className={TABLE}>
+        <thead>
+          <tr><th scope="col">Aqua detections</th><th scope="col">State-months</th><th scope="col">Within ±20%</th><th scope="col">Mean error</th><th scope="col">Bias</th></tr>
+        </thead>
+        <tbody>
+          {BY_SIZE.map((r) => (
+            <tr key={r.size}><th scope="row">{r.size}</th><td>{r.months}</td><td>{r.within}</td><td>{r.error}</td><td>{r.bias}</td></tr>
+          ))}
+        </tbody>
+      </table></div>
+      <p>
+        So national months and whole years are reliable, and a single month of a small state is indicative. We tried other
+        shrinkage strengths and a non-linear calibration, choosing each on 2019–2020 and reporting on 2021–2022; none
+        improved the result. Our first target (80% of all state-months within ±20%) is therefore not met, and the criterion
+        is stated per level above instead. The full table and the next steps are in{' '}
+        <a href={`${repo}/blob/main/docs/METHOD.md`} target="_blank" rel="noreferrer">docs/METHOD.md</a>.
+      </p>
       <h2>Other views</h2>
       <ul>
         <li><strong>This year so far:</strong> cumulative harmonized detections since January against the median and the
@@ -47,7 +80,7 @@ export function Method({ manifest, repo }: { manifest: Manifest | null; repo: st
         <li>Values from 2024 and before August 2002 are estimates; the calendar marks those years with “est.” and the CSV includes the observed counts of every satellite.</li>
         <li>From 2024 the Aqua and Terra orbits drifted to later hours, when more fires burn, so their raw counts are no longer comparable with earlier years.</li>
         <li>The last month is partial and compared pro rata; the last days use near-real-time data that may still change.</li>
-        <li>Drawn areas are approximated by the 0.1° cells whose centre falls inside them.</li>
+        <li>Drawn areas are approximated by the 0.1° cells whose centre falls inside them. An area too small to hold a cell centre uses the one cell around it and is marked approximate.</li>
       </ul>
       <h2>Sources</h2>
       <ul>

@@ -1,13 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { ExternalLink, MapPinned, Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { loadAppData, type AppData, type AreaSeries, type Satellite } from './data/load'
-import { seriesForRing } from './data/queries'
+import { seriesForRing, type RingSeries } from './data/queries'
 import { buildCsv, csvFileName, downloadText } from './data/csv'
-import { ringBounds, type Ring } from './geo/aoi'
+import { cellsInRing, ringBounds, type Ring } from './geo/aoi'
+import { anyCellInBrazil, outlinesOf } from './geo/coverage'
 import { compareMonth } from './calendar/stats'
+import { peaks } from './calendar/peaks'
 import { AnswerLine } from './calendar/AnswerLine'
+import { Highlights } from './calendar/Highlights'
+import { ViewControls } from './calendar/ViewControls'
+import { buildGrid } from './calendar/grid'
+import { answerLines, answerParts } from './calendar/answerParts'
+import { calendarSvg, downloadPng, imageFileName, readColors } from './calendar/exportImage'
 import { CalendarTable } from './calendar/CalendarTable'
 import { SeasonRhythm } from './calendar/SeasonRhythm'
 import { YearToDate } from './calendar/YearToDate'
@@ -16,6 +23,8 @@ import { AreaPanel, SAT_LABEL, type Area, type View } from './AreaPanel'
 import { Method } from './Method'
 
 const REPO = 'https://github.com/matheus-c-feitosa/jangada-orbital'
+/** west, south, east, north of Brazil, for the CSV header and the FIRMS request */
+const BRAZIL_BBOX: [number, number, number, number] = [-74, -34, -34.7, 5.4]
 
 function initialTheme(): Theme {
   try {
@@ -57,7 +66,7 @@ export function App() {
   const desktop = useMediaQuery('(min-width: 1024px)')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [area, setArea] = useState<Area>({ kind: 'country' })
-  const [ringSeries, setRingSeries] = useState<(AreaSeries & { cells: number }) | null>(null)
+  const [ringSeries, setRingSeries] = useState<RingSeries | null>(null)
   const [areaLoading, setAreaLoading] = useState(false)
   const [areaError, setAreaError] = useState<string | null>(null)
   const [view, setView] = useState<View>('harmonized')
@@ -65,6 +74,8 @@ export function App() {
   const [fromYear, setFromYear] = useState(2001)
   const [toYear, setToYear] = useState<number | null>(null)
   const [drawMode, setDrawMode] = useState<DrawMode>('none')
+  const [imageBusy, setImageBusy] = useState(false)
+  const [imageError, setImageError] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setLoadError(null)
@@ -136,7 +147,7 @@ export function App() {
     const csv = buildCsv(series, {
       manifest: data.manifest,
       areaLabel: areaName,
-      bbox: areaBounds ?? [-74, -34, -34.7, 5.4],
+      bbox: areaBounds ?? BRAZIL_BBOX,
       from: `${fromYear}-01`,
       to: `${endYear}-12`,
     })
@@ -145,17 +156,63 @@ export function App() {
 
   const values = !series ? [] : view === 'harmonized' ? series.value : series.observed[sat]
   const years = Array.from({ length: lastYear - 2001 + 1 }, (_, i) => 2001 + i)
-  const empty = area.kind === 'ring' && ringSeries?.cells === 0
+  const highlights = useMemo(
+    () => (series ? peaks(series.months, values, fromYear, endYear, partialMonth) : null),
+    [series, values, fromYear, endYear, partialMonth],
+  )
+  // No detections at all can mean "nothing burned here" or "there is no data here" (open sea, another country);
+  // only the second one is a coverage problem, so it is checked against the state outlines.
+  const outlines = useMemo(() => (data ? outlinesOf(data.states) : []), [data])
+  const outside = useMemo(() => {
+    if (area.kind !== 'ring' || !ringSeries || ringSeries.value.some((v) => v > 0)) return false
+    return !anyCellInBrazil(cellsInRing(area.ring).cells, outlines)
+  }, [area, ringSeries, outlines])
+  const skipToMain = (e: MouseEvent) => {
+    e.preventDefault() // a plain #main link would change the hash, which also selects the page
+    document.getElementById('main')?.focus()
+  }
+
+  const caption = view === 'harmonized'
+    ? 'Fire detections per month, harmonized (Aqua-MODIS equivalent)'
+    : `Fire detections per month as delivered by ${SAT_LABEL[sat]} (not comparable across sensors)`
+
+  const exportImage = async () => {
+    if (!data || !series) return
+    setImageBusy(true)
+    setImageError(null)
+    try {
+      const { grid, breaks } = buildGrid(series.months, values, view === 'harmonized' ? series.source : null, fromYear, endYear, partialMonth, partialDays)
+      const { svg, width, height } = calendarSvg({
+        title: areaName,
+        lines: comparison ? answerLines(answerParts(comparison, data.manifest.last_day_partial)) : [],
+        caption,
+        grid, breaks, partialMonth,
+        harmonized: view === 'harmonized',
+        footer: [
+          `Source: NASA FIRMS active fire data (MODIS C6.1, VIIRS 375 m), harmonized by Jangada Orbital to Aqua-MODIS-equivalent detections (model ${data.manifest.model_version}). Data through ${data.manifest.data_date}.`,
+          'est. = the year includes estimated months (Terra 2000–02, VIIRS from 2024). Not an official NASA product.',
+        ],
+        colors: readColors(),
+      })
+      await downloadPng(svg, width, height, imageFileName(areaName, fromYear, endYear))
+    } catch (e) {
+      setImageError(`Could not make the image (${(e as Error).message}).`)
+    } finally {
+      setImageBusy(false)
+    }
+  }
 
   const panel = data && (
     <AreaPanel data={data} theme={theme} area={area} onArea={chooseArea} areaBounds={areaBounds}
-      drawMode={drawMode} onDrawMode={setDrawMode} onDrawn={onDrawn} view={view} onView={setView} sat={sat} onSat={setSat}
-      years={years} fromYear={fromYear} toYear={endYear} onRange={(f, t) => { setFromYear(f); setToYear(t) }}
-      canDownload={!!series && !areaLoading} onDownload={download} />
+      drawMode={drawMode} onDrawMode={setDrawMode} onDrawn={onDrawn} />
   )
 
   return (
     <>
+      <a href="#main" onClick={skipToMain}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:font-semibold focus:text-primary-foreground">
+        Skip to main content
+      </a>
       <header className="flex h-14 items-center gap-4 border-b border-line bg-surface px-6 max-lg:gap-1 max-lg:px-3">
         <a className="flex items-baseline gap-2.5 whitespace-nowrap text-base font-semibold no-underline" href="#" onClick={() => setPage('calendar')}>
           Jangada Orbital <span className="text-sm font-normal text-ink-2 max-lg:hidden">Harmonized fire calendar · Brazil</span>
@@ -177,14 +234,14 @@ export function App() {
       {page === 'method' ? (
         <Method manifest={data?.manifest ?? null} repo={REPO} />
       ) : loadError ? (
-        <main className="p-6" role="alert">
+        <main id="main" tabIndex={-1} className="p-6 outline-none" role="alert">
           <p className="text-ink-2">The fire data could not be loaded ({loadError}).</p>
           <Button variant="outline" className="h-10" onClick={load}>Try again</Button>
         </main>
       ) : !data ? (
-        <main className="p-6"><p className="py-12 text-ink-2" aria-busy="true">Loading 26 years of fire data…</p></main>
+        <main id="main" tabIndex={-1} className="p-6 outline-none"><p className="py-12 text-ink-2" aria-busy="true">Loading 26 years of fire data…</p></main>
       ) : (
-        <div className="grid items-start gap-6 p-6 lg:grid-cols-[340px_minmax(0,1fr)] max-lg:gap-4 max-lg:p-4">
+        <div className="grid items-start gap-6 p-6 lg:grid-cols-[380px_minmax(0,1fr)] max-lg:gap-4 max-lg:p-4">
           {desktop ? (
             <aside className="sticky top-6" aria-label="Area and view">{panel}</aside>
           ) : (
@@ -202,27 +259,38 @@ export function App() {
             </Sheet>
           )}
 
-          <main className="min-w-0">
-            <AnswerLine areaName={areaName} comparison={comparison} loading={areaLoading || !series}
-              cells={area.kind === 'ring' ? ringSeries?.cells : undefined} lastDayPartial={data.manifest.last_day_partial} areaKm2={series?.area_km2} />
+          {/* A flex column so the order can differ by screen: on a phone the busiest-periods summary moves below the
+              calendar, which then starts higher on the screen. Reading order and tab order follow the DOM. */}
+          <main id="main" tabIndex={-1} className="flex min-w-0 flex-col outline-none">
+            <AnswerLine areaName={areaName} comparison={comparison} loading={areaLoading || !series} outside={outside}
+              cells={area.kind === 'ring' ? ringSeries?.cells : undefined} approximate={area.kind === 'ring' && ringSeries?.approximate}
+              lastDayPartial={data.manifest.last_day_partial} areaKm2={series?.area_km2} />
             {areaError && <p className="text-[13px] text-unusual" role="alert">{areaError}</p>}
-            {empty && <p className="text-[13px] text-ink-3" role="status">This area has no grid cells inside Brazil. Draw inside Brazil or pick a state.</p>}
-            {series && !areaLoading && (
-              <CalendarTable
-                months={series.months}
-                values={values}
-                source={view === 'harmonized' ? series.source : null}
-                fromYear={fromYear}
-                toYear={endYear}
-                partialMonth={partialMonth}
-                partialDays={partialDays}
-                caption={view === 'harmonized'
-                  ? 'Fire detections per month, harmonized (Aqua-MODIS equivalent)'
-                  : `Fire detections per month as delivered by ${SAT_LABEL[sat]} (not comparable across sensors)`}
-              />
+            {highlights && !areaLoading && !outside && <div className="lg:order-1 max-lg:order-4 max-lg:mt-6"><Highlights peaks={highlights} /></div>}
+            {!outside && (
+              <div className="order-2">
+                <ViewControls view={view} onView={setView} sat={sat} onSat={setSat}
+                  years={years} fromYear={fromYear} toYear={endYear} onRange={(f, t) => { setFromYear(f); setToYear(t) }}
+                  canExport={!!series && !areaLoading} onCsv={download} onImage={exportImage} imageBusy={imageBusy} imageError={imageError}
+                  firms={{ bbox: areaBounds ?? BRAZIL_BBOX, from: `${fromYear}-01-01`, to: endYear === lastYear ? data.manifest.data_date : `${endYear}-12-31` }} />
+              </div>
             )}
-            {series && !areaLoading && <YearToDate months={series.months} values={series.value} lastMonth={partialMonth} days={partialDays} />}
-            {series && !areaLoading && <SeasonRhythm months={series.months} values={series.value} fromYear={fromYear} toYear={endYear} />}
+            {series && !areaLoading && !outside && (
+              <div className="order-3">
+                <CalendarTable
+                  months={series.months}
+                  values={values}
+                  source={view === 'harmonized' ? series.source : null}
+                  fromYear={fromYear}
+                  toYear={endYear}
+                  partialMonth={partialMonth}
+                  partialDays={partialDays}
+                  caption={caption}
+                />
+              </div>
+            )}
+            {series && !areaLoading && !outside && <div className="order-5"><YearToDate months={series.months} values={series.value} lastMonth={partialMonth} days={partialDays} /></div>}
+            {series && !areaLoading && !outside && <div className="order-6"><SeasonRhythm months={series.months} values={series.value} fromYear={fromYear} toYear={endYear} /></div>}
           </main>
         </div>
       )}

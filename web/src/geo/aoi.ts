@@ -23,8 +23,24 @@ export function pointInRing(lon: number, lat: number, ring: Ring): boolean {
   return inside
 }
 
-/** Cells whose centre falls inside the ring, plus the cell-id box that bounds them. */
-export function cellsInRing(ring: Ring): { cells: Set<number>; box: CellBox | null } {
+/** Cell (cellLat, cellLon) of a key made by `cellKey`. Longitudes stay within ±5000 cells, so rounding is exact. */
+export function cellOfKey(key: number): [number, number] {
+  const cLat = Math.round(key / 10000)
+  return [cLat, key - cLat * 10000]
+}
+
+/** Centre of a cell as [lon, lat]. */
+export const cellCentre = (cLat: number, cLon: number): [number, number] => [(cLon + 0.5) / 10, (cLat + 0.5) / 10]
+
+/** Approximate area of one 0.1° cell, in km² (0.1° of latitude is 11.12 km; longitude shrinks with the cosine). */
+export const cellAreaKm2 = (cLat: number) => 11.1195 * 11.1195 * Math.cos(((cLat + 0.5) / 10) * (Math.PI / 180))
+
+/**
+ * Cells whose centre falls inside the ring, plus the cell-id box that bounds them. An area too small to contain any
+ * cell centre (a 5 km circle, a small municipality) uses the single cell around its centre and is flagged
+ * `approximate`, so it never comes back empty.
+ */
+export function cellsInRing(ring: Ring): { cells: Set<number>; box: CellBox | null; approximate: boolean } {
   const lons = ring.map((p) => p[0])
   const lats = ring.map((p) => p[1])
   const latMin = Math.floor(Math.min(...lats) * 10)
@@ -37,7 +53,10 @@ export function cellsInRing(ring: Ring): { cells: Set<number>; box: CellBox | nu
       if (pointInRing((cLon + 0.5) / 10, (cLat + 0.5) / 10, ring)) cells.add(cellKey(cLat, cLon))
     }
   }
-  return { cells, box: cells.size ? { latMin, latMax, lonMin, lonMax } : null }
+  if (cells.size) return { cells, box: { latMin, latMax, lonMin, lonMax }, approximate: false }
+  const cLat = Math.floor(((Math.min(...lats) + Math.max(...lats)) / 2) * 10)
+  const cLon = Math.floor(((Math.min(...lons) + Math.max(...lons)) / 2) * 10)
+  return { cells: new Set([cellKey(cLat, cLon)]), box: { latMin: cLat, latMax: cLat, lonMin: cLon, lonMax: cLon }, approximate: true }
 }
 
 /** Circle of `km` radius around (lat, lon) as a 64-vertex ring (spherical approximation). */

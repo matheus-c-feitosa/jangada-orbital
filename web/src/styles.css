@@ -152,8 +152,16 @@
     background: var(--unusual);
     box-shadow: 0 0 0 1.5px var(--surface);
   }
-  .map .maplibregl-ctrl-attrib { font-size: 11px; }
 }
+
+/* The map attribution is required, so it must stay readable on both basemaps. These rules are deliberately outside
+   @layer: maplibre-gl.css is unlayered, and an unlayered rule always beats one inside a layer, whatever its specificity. */
+.map .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  font-size: 11px;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+}
+.map .maplibregl-ctrl.maplibregl-ctrl-attrib a { color: var(--ink-2); }
 
 @media (prefers-reduced-motion: no-preference) {
   .cell { transition: background-color 240ms cubic-bezier(0.16, 1, 0.3, 1); }

@@ -39,7 +39,7 @@ function addOverlays(map: MapLibre, states: GeoJSON.FeatureCollection) {
   if (!map.getSource('states')) map.addSource('states', { type: 'geojson', data: states })
   if (!map.getSource('area')) map.addSource('area', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
   if (!map.getLayer('states-line')) {
-    map.addLayer({ id: 'states-line', type: 'line', source: 'states', paint: { 'line-color': cssVar('--ink-3'), 'line-width': 0.6, 'line-opacity': 0.7 } })
+    map.addLayer({ id: 'states-line', type: 'line', source: 'states', paint: { 'line-color': cssVar('--ink-2'), 'line-width': 0.9, 'line-opacity': 0.85 } })
   }
   if (!map.getLayer('state-fill')) {
     map.addLayer({ id: 'state-fill', type: 'fill', source: 'states', filter: ['==', ['get', 'uf'], ''], paint: { 'fill-color': area, 'fill-opacity': 0.18 } })
@@ -136,7 +136,8 @@ export function MapView({ theme, states, stateCode, ring, bounds, drawMode, onDr
   }, [ready, drawMode])
 
   return (
-    <div className="map relative h-80 overflow-hidden rounded-xl border border-line bg-surface-2 max-lg:h-64" role="region" aria-label="Map of the selected area">
+    // On desktop the map takes the height the sidebar has left, so drawing an area is not done on a thumbnail.
+    <div className="map relative h-80 overflow-hidden rounded-xl border border-line bg-surface-2 max-lg:h-64 lg:h-[clamp(340px,calc(100vh-420px),620px)]" role="region" aria-label="Map of the selected area">
       {offline && <p className="absolute left-2 top-2 z-10 m-0 rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink-2">Basemap unavailable: showing state outlines only.</p>}
       <div ref={container} style={{ position: 'absolute', inset: 0 }} />
     </div>

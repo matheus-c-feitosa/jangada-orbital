@@ -1,12 +1,15 @@
 import { useMemo } from 'react'
 import { AlertTriangle, CheckCircle2, TrendingDown } from 'lucide-react'
+import { useWidth } from '../lib/useWidth'
 import { yearToDate } from './ytd'
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const fmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
-const W = 640
-const H = 220
-const PAD = { left: 52, right: 12, top: 12, bottom: 26 }
+// Axis labels use a compact form ("373K") so they fit the narrow margin at any width.
+const axisFmt = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 0 })
+const MAX_W = 720
+const MIN_W = 280
+const PAD = { left: 44, right: 12, top: 12, bottom: 26 }
 
 interface Props {
   months: string[]
@@ -18,6 +21,10 @@ interface Props {
 /** T047: cumulative detections this year against the median and the p10–p90 range of previous years. */
 export function YearToDate({ months, values, lastMonth, days }: Props) {
   const ytd = useMemo(() => yearToDate(months, values, lastMonth, days), [months, values, lastMonth, days])
+  // Drawn at the width it is shown, so on a phone the axis text stays readable instead of shrinking with the SVG.
+  const [box, measured] = useWidth<HTMLDivElement>(MAX_W)
+  const W = Math.max(MIN_W, Math.min(MAX_W, measured))
+  const H = W < 480 ? 200 : 220
   if (!ytd) return null
 
   const max = Math.max(...ytd.band.map((b) => b.p90), ...ytd.points.map((p) => p.current), 1)
@@ -53,19 +60,21 @@ export function YearToDate({ months, values, lastMonth, days }: Props) {
         {fmt.format(last.current)} detections since January, against a usual {fmt.format(last.median)} at this point of the
         year (normal range {fmt.format(last.p10)}–{fmt.format(last.p90)}, years {range}).
       </p>
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full max-w-[720px]" role="img"
+      <div ref={box} className="w-full max-w-[720px] overflow-hidden">
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="block" role="img"
         aria-label={`Cumulative detections in ${ytd.year} against the normal range of ${range}`}>
         <path d={bandPath} className="fill-c3/25" />
         <path d={median} fill="none" className="stroke-ink-3" strokeWidth={1.5} strokeDasharray="4 4" />
         <path d={current} fill="none" className="stroke-brand" strokeWidth={2.5} strokeLinejoin="round" />
         <circle cx={x(last.month, last.fraction)} cy={y(last.current)} r={4} className="fill-brand stroke-surface" strokeWidth={2} />
         <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} className="stroke-line" />
-        <text x={PAD.left - 6} y={y(max) + 4} textAnchor="end" className="fill-ink-3 text-[11px] tabular-nums">{fmt.format(max)}</text>
-        <text x={PAD.left - 6} y={y(0) + 4} textAnchor="end" className="fill-ink-3 text-[11px]">0</text>
+        <text x={PAD.left - 6} y={y(max) + 4} textAnchor="end" className="fill-ink-3 text-xs tabular-nums">{axisFmt.format(max)}</text>
+        <text x={PAD.left - 6} y={y(0) + 4} textAnchor="end" className="fill-ink-3 text-xs">0</text>
         {MONTHS.map((m, i) => (
-          <text key={m} x={x(i + 1, 0.5)} y={H - 8} textAnchor="middle" className="fill-ink-3 text-[11px]">{m[0]}</text>
+          <text key={m} x={x(i + 1, 0.5)} y={H - 8} textAnchor="middle" className="fill-ink-3 text-xs">{m[0]}</text>
         ))}
       </svg>
+      </div>
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-ink-2">
         <span className="inline-flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-brand" /> {ytd.year}</span>
         <span className="inline-flex items-center gap-1.5"><span className="inline-block w-5 border-t-2 border-dashed border-ink-3" /> Usual (median)</span>

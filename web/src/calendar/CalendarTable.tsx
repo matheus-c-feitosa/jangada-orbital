@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { classBreaks, classOf, compareMonth, daysIn } from './stats'
+import { buildGrid, type Cell } from './grid'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const SOURCE_LABEL = ['Aqua MODIS, observed', 'Terra MODIS, scaled to Aqua (estimate)', 'VIIRS, calibrated to Aqua (estimate)']
@@ -20,45 +20,15 @@ interface Props {
   caption: string
 }
 
-interface Cell {
-  month: string
-  value: number | null
-  cls: number
-  unusual: boolean
-  source: number | null
-}
-
 /** Year × month table. One tab stop; arrow keys move between cells (roving tabindex). */
 export function CalendarTable({ months, values, source, fromYear, toYear, partialMonth, partialDays, caption }: Props) {
   const [active, setActive] = useState<string>(partialMonth)
   const buttons = useRef(new Map<string, HTMLButtonElement>())
 
-  const { grid, breaks } = useMemo(() => {
-    const index = new Map(months.map((m, i) => [m, i]))
-    const visible: number[] = []
-    for (let i = 0; i < months.length; i++) {
-      const y = Number(months[i].slice(0, 4))
-      if (y >= fromYear && y <= toYear && values[i] !== null) visible.push(values[i] as number)
-    }
-    const breaks = classBreaks(visible)
-    const numeric = values.map((v) => v ?? 0)
-    const grid: Cell[][] = []
-    for (let y = fromYear; y <= toYear; y++) {
-      const row: Cell[] = []
-      for (let m = 1; m <= 12; m++) {
-        const key = `${y}-${String(m).padStart(2, '0')}`
-        const i = index.get(key)
-        const value = i === undefined ? null : values[i]
-        let unusual = false
-        if (i !== undefined && value !== null && source) {
-          unusual = compareMonth(months, numeric, i, key === partialMonth ? partialDays : daysIn(key)).unusual
-        }
-        row.push({ month: key, value, cls: value === null ? -1 : classOf(value, breaks), unusual, source: i !== undefined && source ? source[i] : null })
-      }
-      grid.push(row)
-    }
-    return { grid, breaks }
-  }, [months, values, source, fromYear, toYear, partialMonth, partialDays])
+  const { grid, breaks } = useMemo(
+    () => buildGrid(months, values, source, fromYear, toYear, partialMonth, partialDays),
+    [months, values, source, fromYear, toYear, partialMonth, partialDays],
+  )
 
   const flat = grid.flat()
   const activeCell = flat.find((c) => c.month === active) ?? flat[flat.length - 1]
@@ -119,7 +89,7 @@ export function CalendarTable({ months, values, source, fromYear, toYear, partia
               const estimated = row.some((c) => c.source !== null && c.source > 0)
               return (
                 <tr key={year}>
-                  <th scope="row" className="whitespace-nowrap px-1.5 text-right font-medium text-ink-3">{year}{estimated && <small className="ml-1 font-normal max-lg:ml-0 max-lg:block max-lg:leading-none">est.</small>}</th>
+                  <th scope="row" className="whitespace-nowrap px-1.5 text-right font-medium text-ink-3">{year}{estimated && <span className="ml-1 text-[11px] font-normal max-lg:ml-0 max-lg:block max-lg:leading-none">est.</span>}</th>
                   {row.map((c) => (
                     <td key={c.month} className="p-0">
                       <button
