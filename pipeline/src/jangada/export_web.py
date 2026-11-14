@@ -79,6 +79,8 @@ def write_series(con, cells, harmonized, regions, out) -> dict:
     for a in areas.values():
         for key in ("value", "lo", "hi"):
             a[key] = [round(x, 1) for x in a[key]]
+    for code, km2 in area_km2(con).items():
+        areas[code]["area_km2"] = km2
     doc = {"months": [m.isoformat()[:7] for m in months], "source": [int(source.get(m, 0)) for m in months],
            "satellites": SATELLITES, "areas": areas}
     out.write_text(json.dumps(doc, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
@@ -103,6 +105,17 @@ def write_tiles(con, cells, harmonized, codes) -> list[str]:
         con.execute(f"""COPY (SELECT * FROM '{harmonized}' WHERE {where} ORDER BY cell_lat, cell_lon, month)
                         TO '{out}/h_{ty}_{tx}.parquet' (FORMAT parquet, COMPRESSION snappy)""")
     return [f"{ty}_{tx}" for ty, tx in ids]
+
+
+def area_km2(con) -> dict[str, float]:
+    """Geodesic areas (WGS84 ellipsoid) of Brazil and each state from the IBGE outlines, for densities (T048)."""
+    from jangada.download import load_border
+    border = load_border(con)
+    con.execute("SET geometry_always_xy = true")  # GeoJSON is lon/lat
+    areas = {"BR": con.execute(f"SELECT ST_Area_Spheroid({border}) / 1e6").fetchone()[0]}
+    for uf, geometry in load_states().items():
+        areas[uf] = con.execute(f"SELECT ST_Area_Spheroid(ST_GeomFromGeoJSON('{geometry}')) / 1e6").fetchone()[0]
+    return {k: round(v, 1) for k, v in areas.items()}
 
 
 def write_states(con, out) -> int:
@@ -144,6 +157,10 @@ def main() -> int:
     WEB_DATA.mkdir(parents=True, exist_ok=True)
     t0 = time.monotonic()
     con = connect()
+    # Byte-identical output for identical data (no churn in git, e.g. from the daily update): one writer thread,
+    # insertion order kept.
+    con.execute("SET threads = 1")
+    con.execute("SET preserve_insertion_order = true")
 
     codes = " ".join(f"WHEN '{s}' THEN {i}" for i, s in enumerate(SATELLITES))
     files = {

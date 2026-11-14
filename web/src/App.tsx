@@ -204,7 +204,7 @@ export function App() {
 
           <main className="min-w-0">
             <AnswerLine areaName={areaName} comparison={comparison} loading={areaLoading || !series}
-              cells={area.kind === 'ring' ? ringSeries?.cells : undefined} lastDayPartial={data.manifest.last_day_partial} />
+              cells={area.kind === 'ring' ? ringSeries?.cells : undefined} lastDayPartial={data.manifest.last_day_partial} areaKm2={series?.area_km2} />
             {areaError && <p className="text-[13px] text-unusual" role="alert">{areaError}</p>}
             {empty && <p className="text-[13px] text-ink-3" role="status">This area has no grid cells inside Brazil. Draw inside Brazil or pick a state.</p>}
             {series && !areaLoading && (

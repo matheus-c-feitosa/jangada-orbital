@@ -23,6 +23,7 @@ export function buildCsv(series: AreaSeries, opts: CsvOptions): string {
     `# area=${quote(opts.areaLabel)}; grid=${manifest.grid_deg}deg; source=NASA FIRMS (MODIS C6.1, VIIRS 375 m)`,
     '# raw hotspots: https://firms.modaps.eosdis.nasa.gov/download/ (use the area bbox below)',
     `# bbox=${opts.bbox ? opts.bbox.map((v) => v.toFixed(3)).join(',') : 'n/a'}`,
+    `# area_km2=${series.area_km2 ? Math.round(series.area_km2) : 'n/a'}`,
     'month,harmonized,harmonized_lo,harmonized_hi,source,terra_n,aqua_n,snpp_n,noaa20_n,noaa21_n,viirs_n_1km',
   ]
   series.months.forEach((m, i) => {

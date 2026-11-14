@@ -65,6 +65,19 @@ export function tilesForBox(box: CellBox, tileCells: number): string[] {
   return ids
 }
 
+/** Area of a lon/lat ring on a sphere of the mean Earth radius, in km² (spherical excess; holes not supported). */
+export function ringAreaKm2(ring: Ring): number {
+  const R = 6371.0088
+  const rad = Math.PI / 180
+  let sum = 0
+  for (let i = 0; i < ring.length; i++) {
+    const [lon1, lat1] = ring[i]
+    const [lon2, lat2] = ring[(i + 1) % ring.length]
+    sum += (lon2 - lon1) * rad * (2 + Math.sin(lat1 * rad) + Math.sin(lat2 * rad))
+  }
+  return Math.abs((sum * R * R) / 2)
+}
+
 export function ringBounds(ring: Ring): [number, number, number, number] {
   const lons = ring.map((p) => p[0])
   const lats = ring.map((p) => p[1])

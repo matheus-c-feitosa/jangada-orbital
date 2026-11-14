@@ -40,6 +40,8 @@ export interface AreaSeries {
   observed: Record<Satellite, (number | null)[]>
   /** VIIRS ~1 km positions per overpass, summed over the VIIRS satellites */
   viirs_k: number[]
+  /** geodesic area of the selection, km² (T048) */
+  area_km2?: number
 }
 
 interface SeriesDoc {
