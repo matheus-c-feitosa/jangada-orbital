@@ -1,0 +1,28 @@
+# Checks that the FIRMS_MAP_KEY repository secret is set and accepted by FIRMS, without printing it
+# (GitHub also masks secrets in logs). Run it by hand after changing the secret.
+name: Check FIRMS key
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/t050-daily-update]
+    paths: ['.github/workflows/check-firms-key.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate FIRMS_MAP_KEY
+        env:
+          KEY: ${{ secrets.FIRMS_MAP_KEY }}
+        run: |
+          set -eu
+          if [ -z "${KEY}" ]; then echo "::error::FIRMS_MAP_KEY is empty or missing"; exit 1; fi
+          echo "key length: ${#KEY} (expected 32)"
+          code=$(curl -sS -o status.json -w '%{http_code}' --max-time 30 "https://firms.modaps.eosdis.nasa.gov/mapserver/mapkey_status/?MAP_KEY=${KEY}")
+          echo "FIRMS mapkey_status: HTTP ${code}"
+          [ "${code}" = 200 ] || { echo "::error::FIRMS rejected the key"; exit 1; }
+          jq -r '"transactions in use: \(.current_transactions) of \(.transaction_limit)"' status.json
