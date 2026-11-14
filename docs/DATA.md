@@ -52,6 +52,63 @@ Notes:
 - Standard Processing (SP) data replaces Near Real-Time (NRT) data with about a 5-month lag.
 - FIRMS lists VIIRS S-NPP 375 m coverage until 2026-11-02, so the recent series relies on NOAA-20 and NOAA-21.
 
+## How the pipeline uses them
+
+| Period | Terra + Aqua (MODIS) | S-NPP | NOAA-20 | NOAA-21 |
+|---|---|---|---|---|
+| up to 2025 | yearly file | yearly file | yearly file | area API (from 2023-03) |
+| 2026 | area API | area API (until 2026-11-02) | area API | area API |
+
+- **Choice of product.** In the area API we use standard processing (SP) while it exists, and near real time (NRT) after it.
+- **Clipping.** The area API takes a rectangle, and the FIRMS country API no longer works ("Invalid API call", 2026-11-14). So API points are clipped with the official IBGE border of Brazil, the same area as the yearly country files. `jangada-download crosscheck` measures the difference between the two routes.
+- **One schema for all files.** `pipeline/src/jangada/normalize.py` maps every file to the same columns:
+  - satellite names: Terra, Aqua, S-NPP, NOAA-20, NOAA-21;
+  - confidence classes: low, nominal, high (MODIS < 30, 30–79, ≥ 80);
+  - `type`, which only standard processing has.
+
+## Aggregation (`jangada-aggregate`)
+
+1. Keep vegetation fires only (`type` 0).
+   - NRT rows have no `type`. We drop them where standard processing ever marked the same ~1 km position as a static land source or offshore (`type` 2 or 3).
+   - Drop low-confidence detections. `--keep-low` keeps them.
+2. Collapse detections into distinct ~1 km positions (0.01°) per overpass. Several 375 m VIIRS pixels of one fire count once, as a 1 km MODIS pixel would. This is the first harmonization step.
+3. Count per 0.1° cell (about 11 km), month and satellite into `data/processed/cell_month.parquet`:
+   - `n`: detections as delivered;
+   - `n_1km`: distinct ~1 km positions per overpass;
+   - `n_day`: daytime detections;
+   - `frp_sum`: total fire radiative power.
+4. National monthly totals go to `brazil_month.csv`, and yearly totals per satellite to `overlap_annual.csv`. These yearly totals feed the VIIRS / MODIS calibration.
+
+## First full run (2026-11-14)
+
+- **Points.** 2000-11-01 to 2026-11-14, Brazil. About 40 million hotspots, stored as 602 MB of Parquet in `data/interim/points/`.
+- **Cross-check of the two routes** (NOAA-20, September 2025):
+  - yearly country file: 207,898 hotspots;
+  - area API clipped with the IBGE border: 207,864 hotspots;
+  - difference: **-0.02%**, so both routes cover the same area.
+- **Aggregation** took 0.7 min. `cell_month.parquet` has 6.4 million rows and takes 29 MB, small enough to serve as a static file.
+- **VIIRS against Aqua MODIS**, yearly hotspots in Brazil:
+
+  | Period | Ratio as delivered | Ratio after the ~1 km collapse |
+  |---|---|---|
+  | 2012–2023 | 5.9–6.8 | 3.9–4.3 |
+  | 2024–2026 | 5.1–6.0 | 3.3–3.6 |
+
+  - The ~1 km collapse removes about a third of the gap. The rest is the higher sensitivity of VIIRS to small fires, which the calibration has to model.
+  - The ratio is very stable from 2012 to 2023, which makes it a good calibration period.
+  - The ratio falls from 2024. To check: the end-of-life orbit drift of Aqua and Terra, whose overpass times changed.
+  - S-NPP and NOAA-20 agree within about 3% in every year they share, so the three VIIRS satellites can be treated as one family.
+
+## Known limitation: oceanic islands
+
+- The yearly country files include 3 detections on Fernando de Noronha, all on 2014-03-09, out of 46.4
+  million hotspots.
+- The area-API route never includes such points:
+  - the API rectangle stops at 34.7° W;
+  - the IBGE border does not include Trindade;
+  - the simplified IBGE polygon of Noronha does not contain those 3 points.
+- The effect on any statistic is below 0.0001%. It is accepted and listed here for transparency.
+
 ## Disk plan
 
 Brazil, all years and sensors, is about 3 GB of CSV. The pipeline handles one file at a time:

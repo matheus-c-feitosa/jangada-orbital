@@ -1,0 +1,18 @@
+# gitleaks config: default rules plus the NASA FIRMS MAP_KEY, which the default rules do not detect.
+# Run before every push: gitleaks git --redact . && gitleaks dir --redact .
+[extend]
+useDefault = true
+
+[[rules]]
+id = "nasa-firms-map-key"
+description = "NASA FIRMS MAP_KEY in an assignment"
+regex = '''(?i)(?:firms_map_key|map_key)\s*[=:]\s*["']?([A-Za-z0-9]{32})\b'''
+secretGroup = 1
+keywords = ["map_key"]
+
+[[rules]]
+id = "nasa-firms-map-key-in-url"
+description = "NASA FIRMS MAP_KEY inside an API URL"
+regex = '''firms\.modaps\.eosdis\.nasa\.gov/(?:api/[a-z_]+/csv|mapserver/mapkey_status/\?MAP_KEY=)/?([A-Za-z0-9]{32})\b'''
+secretGroup = 1
+keywords = ["firms.modaps"]

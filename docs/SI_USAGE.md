@@ -12,3 +12,4 @@ Rules we follow:
 |---|---|---|---|
 | 2026-11-14 | Claude Code (Claude Opus 5.5) | Repository skeleton: README, docs, `.gitignore`, `.env.example`, `pipeline/` config and `jangada-check` access check | Team: ran `uv run jangada-check` |
 | 2026-11-14 | Claude Code (Claude Opus 5.5) | `jangada-probe` API test and the verified results in `docs/DATA.md` | Team: ran `uv run jangada-probe`, all services OK |
+| 2026-11-14 | Claude Code (Claude Opus 5.5) | `normalize.py`, `download.py` (yearly files, paced area API, IBGE clipping, cross-check) and `aggregate.py` (filters, ~1 km collapse, monthly 0.1° counts) | Team: full run on Brazil data, cross-check against the yearly file |

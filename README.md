@@ -38,6 +38,18 @@ uv run jangada-check          # checks the key, FIRMS products and dates, yearly
 uv run jangada-probe          # deeper test: every API source, old dates, transaction cost (~80 transactions)
 ```
 
+## Data pipeline
+
+```sh
+cd pipeline
+uv run jangada-download all         # ~20 min: yearly files (5 min, 3.2 GB, no key) + area API (~15 min, paced)
+uv run jangada-download crosscheck  # checks API + border clipping against the yearly file (NOAA-20, Sep 2025)
+uv run jangada-aggregate            # monthly counts per 0.1° cell and satellite -> data/processed/
+```
+
+The download is resumable: stop it and run it again at any time. For long runs on a remote machine:
+`setsid nohup uv run jangada-download all > ../data/download.log 2>&1 &`.
+
 ## NASA data
 
 NASA FIRMS active fire / hotspot data: MODIS Collection 6.1 and VIIRS 375 m (S-NPP, NOAA-20, NOAA-21).

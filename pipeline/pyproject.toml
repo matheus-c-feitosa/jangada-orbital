@@ -11,6 +11,8 @@ dependencies = [
 [project.scripts]
 jangada-check = "jangada.check_access:main"
 jangada-probe = "jangada.probe_api:main"
+jangada-download = "jangada.download:main"
+jangada-aggregate = "jangada.aggregate:main"
 
 [build-system]
 requires = ["hatchling"]

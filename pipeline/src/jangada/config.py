@@ -35,6 +35,29 @@ API_SOURCES = (
     "VIIRS_NOAA21_SP", "VIIRS_NOAA21_NRT",
 )
 API_MAX_DAYS = 5
+API_COST_PER_DAY = 2          # measured on 2026-11-14: each requested day costs 2 transactions
+API_BUDGET = 3600             # our ceiling per 10 minutes (FIRMS limit: 5000), leaves room for teammates' tests
+API_WINDOW_S = 600
+
+# What we fetch from the area API (the yearly country files cover the rest).
+# satellite label -> (FIRMS source prefix, first day we need from the API)
+API_PLAN = {
+    "MODIS": ("MODIS", "2026-01-01"),       # Terra + Aqua
+    "S-NPP": ("VIIRS_SNPP", "2026-01-01"),
+    "NOAA-20": ("VIIRS_NOAA20", "2026-01-01"),
+    "NOAA-21": ("VIIRS_NOAA21", "2023-03-01"),  # no yearly country files for NOAA-21
+}
+
+# Official border of Brazil (IBGE), used to clip area-API data so it matches the yearly country files.
+BORDER_URL = ("https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR"
+              "?formato=application/vnd.geo+json&qualidade=maxima")
+BORDER = RAW / "border" / "brazil_ibge.geojson"
+
+POINTS = INTERIM / "points"   # one Parquet per satellite family, year and origin
+
+# DuckDB limits: the user session has an 8 GB memory cap.
+DUCKDB_MEMORY = "3GB"
+DUCKDB_THREADS = 4
 
 
 def yearly_url(sensor: str, year: int, country: str = COUNTRY) -> str:
