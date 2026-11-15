@@ -3,8 +3,8 @@ import { Map as MapLibre, Marker, setWorkerUrl, type ExpressionSpecification, ty
 import 'maplibre-gl/dist/maplibre-gl.css'
 // MapLibre 6 builds its worker URL at runtime, which bundlers cannot see; ship the worker as an asset instead.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
-import { TerraDraw, TerraDrawPolygonMode, TerraDrawRectangleMode, TerraDrawSelectMode } from 'terra-draw'
-import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter'
+// terra-draw loads when the map is idle or someone draws (ensureDraw); only its type is needed up front
+import type { TerraDraw } from 'terra-draw'
 import { Flame, Maximize, Minus, Plus, X } from 'lucide-react'
 import type { Ring } from '../geo/aoi'
 import { splitEdges } from '../geo/edges'
@@ -110,13 +110,48 @@ function anomalyColor(standings: Record<string, StateStanding>, key: string): Ex
 /** recurrence colour step 0..10 for `n` of `span` years with fire */
 export const recurrenceStep = (n: number, span: number) => Math.max(0, Math.min(10, Math.round((n * 10) / Math.max(1, span))))
 
+type RecImage = { url: string; coordinates: [[number, number], [number, number], [number, number], [number, number]] }
+
+/** CSS colours as the 32-bit pixels of an ImageData (RGBA bytes, little-endian), read back from a 1 x 1 canvas. */
+function pixels(colors: string[]): Uint32Array | null {
+  const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
+  if (!ctx) return null
+  return Uint32Array.from(colors, (c) => {
+    ctx.clearRect(0, 0, 1, 1)
+    ctx.fillStyle = c
+    ctx.fillRect(0, 0, 1, 1)
+    const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data
+    return ((a << 24) | (b << 16) | (g << 8) | r) >>> 0
+  })
+}
+
+/** number of set bits */
+const bits = (v: number) => {
+  v -= (v >>> 1) & 0x55555555
+  v = (v & 0x33333333) + ((v >>> 2) & 0x33333333)
+  return (((v + (v >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24
+}
+
+// one image per recurrence file, period and palette: switching layers, periods or themes back reuses it
+const recImages = new WeakMap<Recurrence, Map<string, RecImage>>()
+
 /** The recurrence grid as one image (one pixel column per 0.1° cell), drawn on a canvas and placed over Brazil.
  * MapLibre stretches an image source linearly in Web Mercator, so the rows follow Mercator y, not latitude: drawn
- * linearly in latitude, the cells in central Brazil land about 1° (100 km) south of where they are. */
-function recurrenceImage(r: Recurrence, from: number, to: number) {
+ * linearly in latitude, the cells in central Brazil land about 1° (100 km) south of where they are. The pixels are
+ * written straight into an ImageData: 56 thousand fillRect calls took a third of a second on a slow phone. */
+function recurrenceImage(r: Recurrence, from: number, to: number): RecImage | null {
+  const colors = REC_VARS.map(cssVar)
+  const key = `${from}-${to}-${colors.join()}`
+  let byKey = recImages.get(r)
+  if (!byKey) recImages.set(r, (byKey = new Map()))
+  const hit = byKey.get(key)
+  if (hit) return hit
   let latMin = Infinity, latMax = -Infinity, lonMin = Infinity, lonMax = -Infinity
   for (const [la, lo] of r.cells) {
-    latMin = Math.min(latMin, la); latMax = Math.max(latMax, la); lonMin = Math.min(lonMin, lo); lonMax = Math.max(lonMax, lo)
+    if (la < latMin) latMin = la
+    if (la > latMax) latMax = la
+    if (lo < lonMin) lonMin = lo
+    if (lo > lonMax) lonMax = lo
   }
   const west = lonMin / 10, east = (lonMax + 1) / 10, north = (latMax + 1) / 10, south = latMin / 10
   const w = lonMax - lonMin + 1
@@ -125,18 +160,27 @@ function recurrenceImage(r: Recurrence, from: number, to: number) {
   canvas.width = w
   canvas.height = rows
   const ctx = canvas.getContext('2d')
-  if (!ctx) return null
-  const colors = REC_VARS.map(cssVar)
+  const px = pixels(colors)
+  if (!ctx || !px) return null
+  const image = ctx.createImageData(w, rows)
+  const out = new Uint32Array(image.data.buffer)
   const span = to - from + 1
+  // years from..to as bits of the mask (bit 0 = r.first), as yearsWithFire counts them
+  let range = 0
+  for (let y = Math.max(from, r.first); y <= to && y - r.first < 31; y++) range |= 1 << (y - r.first)
+  // canvas rows of each cell latitude, computed once per latitude
+  const top = new Int32Array(latMax - latMin + 2)
+  for (let la = latMin; la <= latMax + 1; la++) top[la - latMin] = mercatorRow(la / 10, north, south, rows)
   for (const [la, lo, mask] of r.cells) {
-    ctx.fillStyle = colors[recurrenceStep(yearsWithFire(mask, r.first, from, to), span)]
-    const top = mercatorRow((la + 1) / 10, north, south, rows)
-    ctx.fillRect(lo - lonMin, top, 1, Math.max(1, mercatorRow(la / 10, north, south, rows) - top))
+    const c = px[recurrenceStep(bits(mask & range), span)]
+    const y0 = top[la + 1 - latMin]
+    const y1 = y0 + Math.max(1, top[la - latMin] - y0)
+    for (let y = y0; y < y1 && y < rows; y++) out[y * w + lo - lonMin] = c
   }
-  return {
-    url: canvas.toDataURL(),
-    coordinates: [[west, north], [east, north], [east, south], [west, south]] as [[number, number], [number, number], [number, number], [number, number]],
-  }
+  ctx.putImageData(image, 0, 0)
+  const img: RecImage = { url: canvas.toDataURL(), coordinates: [[west, north], [east, north], [east, south], [west, south]] }
+  byKey.set(key, img)
+  return img
 }
 
 function recentGeoJson(r: Recent | null): GeoJSON.FeatureCollection {
@@ -192,6 +236,25 @@ function addOverlays(map: MapLibre, states: GeoJSON.FeatureCollection, places: b
   })
 }
 
+/** The theme's colours on the overlay layers, without rebuilding the map (a new map costs a WebGL context, a style
+ * and new workers). The anomaly fill and the recurrence image follow in their own effects. */
+function recolor(map: MapLibre) {
+  type ColorProp = 'background-color' | 'fill-color' | 'line-color' | 'circle-color' | 'circle-stroke-color'
+  const set = (id: string, prop: ColorProp, v: string) => { if (map.getLayer(id)) map.setPaintProperty(id, prop, v) }
+  set('bg', 'background-color', cssVar('--map-bg'))
+  set('land', 'fill-color', cssVar('--map-land'))
+  set('states-faint', 'line-color', cssVar('--map-outline'))
+  set('states-line', 'line-color', cssVar('--ink-2'))
+  set('biomes-line', 'line-color', cssVar('--map-border'))
+  set('country-line', 'line-color', cssVar('--map-outline'))
+  for (const id of ['biome', 'state', 'area']) {
+    set(`${id}-halo`, 'line-color', cssVar('--map-halo'))
+    set(`${id}-line`, 'line-color', cssVar('--map-area'))
+  }
+  set('recent', 'circle-color', cssVar('--c5'))
+  set('recent', 'circle-stroke-color', cssVar('--unusual'))
+}
+
 type Pop =
   | { kind: 'state'; uf: string; x: number; y: number }
   | { kind: 'biome'; id: string; x: number; y: number }
@@ -201,17 +264,21 @@ type Pop =
 const round6 = (v: number) => Math.round(v * 1e6) / 1e6
 
 /** Map of the design: land and sea in navy, biome and state borders, the selected area outlined in light orange,
- * one data layer at a time, rectangle/polygon drawing. Remount it (key) to change theme or basemap. */
+ * one data layer at a time, rectangle/polygon drawing. The plain map follows the theme in place; remount it (key) to
+ * turn the basemap on or off, or to change the basemap's theme. */
 export function MapView(p: Props) {
   const i = useI18n()
   const { theme, places, states, stateCode, ring, bounds, drawMode, onDrawn, layer, standings, biomeStandings, normalUnit, dateLabel, compact, className } = p
   const container = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibre | null>(null)
   const drawRef = useRef<TerraDraw | null>(null)
+  const drawLoad = useRef<Promise<TerraDraw | null> | null>(null)
   const boxId = useRef<string | number | null>(null)
   const onDrawnRef = useRef(onDrawn)
   onDrawnRef.current = onDrawn
   const [ready, setReady] = useState(false)
+  // the drawing tools have loaded (data-drawing-ready, for the end-to-end tests)
+  const [drawReady, setDrawReady] = useState(false)
   const [offline, setOffline] = useState(false)
   const [pop, setPop] = useState<Pop | null>(null)
   // phones with little room for the map start with the legend folded
@@ -255,7 +322,13 @@ export function MapView(p: Props) {
     // the map lives in panels that open, close and resize; keep the canvas in step with its box
     // and keep the selected area framed when the box changes (panels opening, phone rotation)
     let frame = 0
+    const box = container.current
+    let last = { w: 0, h: 0 }
     const resize = new ResizeObserver(() => {
+      const w = box.clientWidth, h = box.clientHeight
+      // hidden (the Method page): nothing to draw; shown again at the same size: keep the view as the user left it
+      if (!w || !h || (w === last.w && h === last.h)) return
+      last = { w, h }
       map.resize()
       window.cancelAnimationFrame(frame)
       frame = window.requestAnimationFrame(() => map.fitBounds(boundsRef.current ?? BRAZIL, { padding: padding(), maxZoom: 7.5, duration: 0 }))
@@ -278,33 +351,6 @@ export function MapView(p: Props) {
     map.on('style.load', () => {
       window.clearTimeout(timer)
       addOverlays(map, states, places && !fellBack)
-      if (!drawRef.current) {
-        const draw = new TerraDraw({
-          adapter: new TerraDrawMapLibreGLAdapter({ map }),
-          modes: [
-            new TerraDrawRectangleMode(),
-            new TerraDrawPolygonMode(),
-            // the phone box: drag a corner and the opposite one stays put
-            new TerraDrawSelectMode({
-              flags: { rectangle: { feature: { draggable: true, coordinates: { draggable: true, resizable: 'opposite' } } } },
-              styles: {
-                selectedPolygonColor: '#F97316', selectedPolygonFillOpacity: 0.15, selectedPolygonOutlineColor: '#FDBA74', selectedPolygonOutlineWidth: 3,
-                selectionPointColor: '#F97316', selectionPointWidth: 9, selectionPointOutlineColor: '#FFFFFF', selectionPointOutlineWidth: 2,
-              },
-            }),
-          ],
-        })
-        draw.start()
-        draw.on('finish', (id) => {
-          if (drawModeRef.current === 'box') return // dragging the box's corners also "finishes"; the button confirms it
-          const feature = draw.getSnapshotFeature(id)
-          const coords = feature?.geometry.type === 'Polygon' ? (feature.geometry.coordinates[0] as Ring) : null
-          draw.clear()
-          draw.setMode('static')
-          if (coords && coords.length >= 4) onDrawnRef.current(coords)
-        })
-        drawRef.current = draw
-      }
       loaded = true
       setReady(true)
     })
@@ -333,11 +379,74 @@ export function MapView(p: Props) {
       resize.disconnect()
       drawRef.current?.stop()
       drawRef.current = null
+      drawLoad.current = null
       map.remove()
       mapRef.current = null
     }
-    // Runs once: a theme or basemap change remounts the component (key), and states never change after load.
+    // Runs once: a basemap change remounts the component (key), and states never change after load.
   }, [])
+
+  /** The drawing tools (terra-draw, about 50 KB gzip), created once per map: when the map is idle, or at once when
+   * someone draws before that. */
+  const ensureDraw = (map: MapLibre): Promise<TerraDraw | null> => {
+    if (drawRef.current) return Promise.resolve(drawRef.current)
+    drawLoad.current ??= Promise.all([import('terra-draw'), import('terra-draw-maplibre-gl-adapter')])
+      .then(([td, adapter]) => {
+        if (mapRef.current !== map) return null
+        const draw = new td.TerraDraw({
+          adapter: new adapter.TerraDrawMapLibreGLAdapter({ map }),
+          modes: [
+            new td.TerraDrawRectangleMode(),
+            new td.TerraDrawPolygonMode(),
+            // the phone box: drag a corner and the opposite one stays put
+            new td.TerraDrawSelectMode({
+              flags: { rectangle: { feature: { draggable: true, coordinates: { draggable: true, resizable: 'opposite' } } } },
+              styles: {
+                selectedPolygonColor: '#F97316', selectedPolygonFillOpacity: 0.15, selectedPolygonOutlineColor: '#FDBA74', selectedPolygonOutlineWidth: 3,
+                selectionPointColor: '#F97316', selectionPointWidth: 9, selectionPointOutlineColor: '#FFFFFF', selectionPointOutlineWidth: 2,
+              },
+            }),
+          ],
+        })
+        draw.start()
+        draw.on('finish', (id) => {
+          if (drawModeRef.current === 'box') return // dragging the box's corners also "finishes"; the button confirms it
+          const feature = draw.getSnapshotFeature(id)
+          const coords = feature?.geometry.type === 'Polygon' ? (feature.geometry.coordinates[0] as Ring) : null
+          draw.clear()
+          draw.setMode('static')
+          if (coords && coords.length >= 4) onDrawnRef.current(coords)
+        })
+        drawRef.current = draw
+        setDrawReady(true)
+        return draw
+      })
+      .catch((e: Error) => {
+        drawLoad.current = null // a failed download is tried again on the next drawing
+        throw e
+      })
+    return drawLoad.current
+  }
+
+  // load the drawing tools once the first screen is done
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || !map) return
+    const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500))
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout
+    const handle = idle(() => { ensureDraw(map).catch(() => { /* retried when someone draws */ }) }, { timeout: 5000 })
+    return () => cancel(handle)
+    // ensureDraw only reads refs
+  }, [ready])
+
+  // the plain map follows the theme in place
+  const themeRef = useRef(theme)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || !map || themeRef.current === theme) return
+    themeRef.current = theme
+    recolor(map)
+  }, [ready, theme])
 
   useEffect(() => {
     const map = mapRef.current
@@ -379,21 +488,30 @@ export function MapView(p: Props) {
     map.setLayoutProperty('recurrence', 'visibility', layer === 'recurrence' && p.recurrence ? 'visible' : 'none')
     map.setLayoutProperty('recent', 'visibility', layer === 'recent' && p.recent ? 'visible' : 'none')
     setPop(null)
-  }, [ready, layer, standings, biomeStandings, normalUnit, p.recurrence, p.recent])
+    // theme: the anomaly colours come from the theme's palette
+  }, [ready, layer, standings, biomeStandings, normalUnit, p.recurrence, p.recent, theme])
 
   const [from, to] = p.period
+  const shownImage = useRef<RecImage | null>(null)
   useEffect(() => {
     const map = mapRef.current
     if (!ready || !map || !p.recurrence || layer !== 'recurrence') return
     const img = recurrenceImage(p.recurrence, from, to)
-    if (img) (map.getSource('recurrence') as ImageSource | undefined)?.updateImage(img)
-  }, [ready, p.recurrence, from, to, layer])
+    if (img && img !== shownImage.current) {
+      ;(map.getSource('recurrence') as ImageSource | undefined)?.updateImage(img)
+      shownImage.current = img
+    }
+    // theme: the image is drawn in the theme's palette
+  }, [ready, p.recurrence, from, to, layer, theme])
 
+  // the last-7-days points go to the map only while that layer shows, and only once
+  const recentSent = useRef<Recent | null>(null)
   useEffect(() => {
     const map = mapRef.current
-    if (!ready || !map) return
+    if (!ready || !map || layer !== 'recent' || !p.recent || recentSent.current === p.recent) return
     ;(map.getSource('recent') as GeoJSONSource | undefined)?.setData(recentGeoJson(p.recent))
-  }, [ready, p.recent])
+    recentSent.current = p.recent
+  }, [ready, p.recent, layer])
 
   // Name chips of the design: biomes when their borders show, state codes when state borders or state colours show.
   const showStateChips = p.stateBorders || (layer === 'normal' && normalUnit === 'state')
@@ -424,20 +542,25 @@ export function MapView(p: Props) {
 
   // drawing modes; 'box' puts an editable rectangle in the middle of the view
   useEffect(() => {
-    const draw = drawRef.current
     const map = mapRef.current
-    if (!ready || !draw || !map) return
-    if (drawMode !== 'box' && boxId.current !== null) { draw.clear(); boxId.current = null }
-    if (drawMode !== 'box') { draw.setMode(drawMode === 'none' ? 'static' : drawMode); return }
-    draw.setMode('select')
-    // in the middle of the part of the map that shows: below the hint at the top, above the sheet at the bottom
-    const { clientWidth: w, clientHeight: h } = map.getContainer()
-    const top = 80, bottom = h - (insetRef.current || 96) - 16
-    const nw = map.unproject([w * 0.3, top + (bottom - top) * 0.3])
-    const se = map.unproject([w * 0.7, top + (bottom - top) * 0.7])
-    const box = [[nw.lng, se.lat], [se.lng, se.lat], [se.lng, nw.lat], [nw.lng, nw.lat], [nw.lng, se.lat]].map((q) => q.map(round6))
-    const [res] = draw.addFeatures([{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [box] }, properties: { mode: 'rectangle' } }])
-    if (res?.valid && res.id !== undefined) { boxId.current = res.id; draw.selectFeature(res.id) }
+    if (!ready || !map || (!drawRef.current && drawMode === 'none')) return
+    let cancelled = false
+    ensureDraw(map).then((draw) => {
+      if (cancelled || !draw) return
+      if (drawMode !== 'box' && boxId.current !== null) { draw.clear(); boxId.current = null }
+      if (drawMode !== 'box') { draw.setMode(drawMode === 'none' ? 'static' : drawMode); return }
+      draw.setMode('select')
+      // in the middle of the part of the map that shows: below the hint at the top, above the sheet at the bottom
+      const { clientWidth: w, clientHeight: h } = map.getContainer()
+      const top = 80, bottom = h - (insetRef.current || 96) - 16
+      const nw = map.unproject([w * 0.3, top + (bottom - top) * 0.3])
+      const se = map.unproject([w * 0.7, top + (bottom - top) * 0.7])
+      const box = [[nw.lng, se.lat], [se.lng, se.lat], [se.lng, nw.lat], [nw.lng, nw.lat], [nw.lng, se.lat]].map((q) => q.map(round6))
+      const [res] = draw.addFeatures([{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [box] }, properties: { mode: 'rectangle' } }])
+      if (res?.valid && res.id !== undefined) { boxId.current = res.id; draw.selectFeature(res.id) }
+    }).catch((e: Error) => console.warn('drawing tools could not load:', e.message))
+    return () => { cancelled = true }
+    // ensureDraw only reads refs
   }, [ready, drawMode])
 
   useEffect(() => {
@@ -494,7 +617,8 @@ export function MapView(p: Props) {
     : layer === 'recurrence' ? i.t('legRec', { a: from, b: to }) : i.t('layerRecent')
 
   return (
-    <div className={`map relative overflow-hidden bg-map-bg ${className ?? 'h-80 rounded-xl border border-line max-lg:h-64'}`} role="region" aria-label={i.t('mapAria')}>
+    <div className={`map relative overflow-hidden bg-map-bg ${className ?? 'h-80 rounded-xl border border-line max-lg:h-64'}`} role="region" aria-label={i.t('mapAria')}
+      data-drawing-ready={drawReady ? '' : undefined}>
       {offline && <p className="absolute left-2 top-2 z-10 m-0 rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink-2">{i.t('basemapOff')}</p>}
       <div ref={container} style={{ position: 'absolute', inset: 0 }} />
       {p.controls && (

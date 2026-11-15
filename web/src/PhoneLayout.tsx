@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Layers, SlidersHorizontal } from 'lucide-react'
-import type { AppData } from './data/load'
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Layers, Moon, SlidersHorizontal, Sun } from 'lucide-react'
+import { SATELLITES, type AppData, type Satellite } from './data/load'
 import type { BiomeInfo, MuniRanking } from './data/extras'
-import type { DrawMode, MapLayer, StateStanding } from './map/MapView'
-import { CircleForm, kindOf, useMuniIndex, type Area, type View } from './AreaPanel'
+import type { DrawMode, MapLayer, StateStanding, Theme } from './map/MapView'
+import { CircleForm, SAT_LABEL, fold, kindOf, useMuniIndex, type Area, type View } from './AreaPanel'
 import { Logo, StatusPill, km2Text, statusOf } from './AreaHeader'
 import { useI18n, type Lang } from './i18n'
 
@@ -40,12 +40,16 @@ interface Props {
   munis: MuniRanking | null
   layer: MapLayer
   onLayer: (l: MapLayer) => void
-  recurrenceYears: [number, number] | null
+  /** undefined while the file loads, null when it is not published */
+  recurrenceYears: [number, number] | null | undefined
   period: [number, number]
   onPeriod: (p: [number, number]) => void
-  recentSpan: string | null
+  recentSpan: string | null | undefined
   values: View
   onValues: (v: View) => void
+  /** satellite of the "as observed" values */
+  sat: Satellite
+  onSat: (s: Satellite) => void
   biomeBorders: boolean
   onBiomeBorders: (on: boolean) => void
   stateBorders: boolean
@@ -54,6 +58,8 @@ interface Props {
   onPlaces: (on: boolean) => void
   lang: Lang
   onLang: (l: Lang) => void
+  theme: Theme
+  onTheme: (t: Theme) => void
 }
 
 /** Height of the sheet over the map, per view (design "UI - Mobile", 390 × 844); the peek is set by the caller. */
@@ -87,8 +93,8 @@ export function PhoneLayout(p: Props) {
   const muni = useMuniIndex(p.munis)
   const [query, setQuery] = useState('')
   const matches = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase('pt-BR')
-    return q.length < 2 ? [] : muni.labels.filter((l) => l.toLocaleLowerCase('pt-BR').includes(q)).slice(0, 40)
+    const q = fold(query.trim())
+    return q.length < 2 ? [] : muni.labels.filter((_, k) => muni.folded[k].includes(q)).slice(0, 40)
   }, [query, muni])
   const yearsFor = p.recurrenceYears ? Array.from({ length: p.recurrenceYears[1] - p.recurrenceYears[0] + 1 }, (_, k) => p.recurrenceYears![0] + k) : []
   const selectedBiome = p.area.kind === 'biome' ? p.biomes.find((b) => b.id === (p.area as { id: string }).id) : null
@@ -234,6 +240,11 @@ export function PhoneLayout(p: Props) {
                   <button type="button" className="btn" aria-pressed={p.values === 'harmonized'} onClick={() => p.onValues('harmonized')}>{i.t('harmonized')}</button>
                   <button type="button" className="btn" aria-pressed={p.values === 'observed'} onClick={() => p.onValues('observed')}>{i.t('observed')}</button>
                 </div>
+                {p.values === 'observed' && (
+                  <select className="ctl !h-12" aria-label={i.t('satellite')} value={p.sat} onChange={(e) => p.onSat(e.target.value as Satellite)}>
+                    {SATELLITES.map((s) => <option key={s} value={s}>{SAT_LABEL[s]}</option>)}
+                  </select>
+                )}
                 <span className="text-xs leading-snug text-ink-3">{i.t('harmonizedHelp')}</span>
               </div>
 
@@ -270,6 +281,15 @@ export function PhoneLayout(p: Props) {
                 <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="phone-lang">
                   <button type="button" lang="en" className="btn" aria-pressed={p.lang === 'en'} onClick={() => p.onLang('en')}>English</button>
                   <button type="button" lang="pt-BR" className="btn" aria-pressed={p.lang === 'pt'} onClick={() => p.onLang('pt')}>Português</button>
+                </div>
+              </div>
+
+              {/* phones have no header bar: the theme switch of the other layouts lives here */}
+              <div className="flex flex-col gap-2">
+                <p className="lbl" id="phone-theme">{i.t('theme')}</p>
+                <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="phone-theme">
+                  <button type="button" className="btn" aria-pressed={p.theme === 'dark'} onClick={() => p.onTheme('dark')}><Moon size={16} aria-hidden="true" />{i.t('themeDark')}</button>
+                  <button type="button" className="btn" aria-pressed={p.theme === 'light'} onClick={() => p.onTheme('light')}><Sun size={16} aria-hidden="true" />{i.t('themeLight')}</button>
                 </div>
               </div>
             </div>

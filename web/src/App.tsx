@@ -1,21 +1,53 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, Download, Globe, Moon, SlidersHorizontal, Sun, X } from 'lucide-react'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { loadAppData, type AppData, type AreaSeries, type Satellite } from './data/load'
 import { seriesForRing } from './data/queries'
-import { loadBiomes, loadIntensity, loadMuniRanking, loadOni, loadRecent, loadRecurrence, muniRing,
-  type BiomeData, type Intensity, type MuniRanking, type Oni, type Recent, type Recurrence } from './data/extras'
+import { loadBiomes, loadIntensity, loadMuniRanking, loadOni, loadRecent, loadRecurrence, muniRing } from './data/extras'
 import { buildCsv, csvFileName, downloadText } from './data/csv'
 import { ringBounds, type Ring } from './geo/aoi'
-import { MapView, type DrawMode, type MapLayer, type StateStanding, type Theme } from './map/MapView'
+import type { DrawMode, MapLayer, StateStanding, Theme } from './map/MapView'
 import { AreaPanel, type Area, type View } from './AreaPanel'
 import { DataPanel, TabList, tabLabels, type Tab } from './DataPanel'
 import { PhoneLayout, SHEET_HEIGHT, type SheetView } from './PhoneLayout'
 import { BIOME_STATES, Logo, StatusPill, densityText, km2Text, percentileText, summaryText, yearStatus } from './AreaHeader'
 import { MAX_COMPARE } from './rank/RankingTable'
 import { ytdStanding } from './rank/ranking'
-import { Method } from './Method'
 import { LangContext, initialLang, makeI18n, saveLang, type Lang } from './i18n'
+import { LoadBoundary } from './LoadBoundary'
+
+// The map (MapLibre, the largest part of the code) is its own chunk, requested once the data is in: the answer and
+// the calendar show without waiting for the map's code. Measured with 4G and CPU 4x, fetching it next to the data
+// instead put the answer 0.4 s later and the idle map no sooner (docs/performance/audit.md).
+const mapChunk = () => import('./map/MapView')
+const MapView = lazy(() => mapChunk().then((m) => ({ default: m.MapView })))
+// The Method page is text and charts nobody needs on the first screen.
+const Method = lazy(() => import('./Method').then((m) => ({ default: m.Method })))
+
+const idle = (cb: () => void, timeout: number) => {
+  if (window.requestIdleCallback) {
+    const h = window.requestIdleCallback(cb, { timeout })
+    return () => window.cancelIdleCallback(h)
+  }
+  const h = window.setTimeout(cb, 1500)
+  return () => window.clearTimeout(h)
+}
+
+/** An optional extra file (data/extras.ts): loaded as soon as `now` is true, or, with `prefetch`, once `after` is true
+ * and the page is idle. undefined until it has loaded; null when the file is not published (a failed download is tried
+ * again the next time `now` turns true). */
+function useExtra<T>(load: () => Promise<T | null>, after: boolean, now: boolean, prefetch = false): T | null | undefined {
+  const [value, setValue] = useState<T | null | undefined>(undefined)
+  const [due, setDue] = useState(false)
+  useEffect(() => (after && prefetch && !due ? idle(() => setDue(true), 6000) : undefined), [after, prefetch, due])
+  useEffect(() => {
+    if (!after || value || !(now || due)) return
+    let live = true
+    load().then((v) => { if (live) setValue(v) })
+    return () => { live = false }
+  }, [after, now, due, value, load])
+  return value
+}
 
 const REPO = 'https://github.com/matheus-c-feitosa/jangada-orbital'
 
@@ -89,6 +121,9 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [theme, setTheme] = useState<Theme>(initialTheme)
   const page = usePage()
+  // the calendar page mounts the first time it shows (a visit that opens on #method does not build a hidden map)
+  const [calendarSeen, setCalendarSeen] = useState(page === 'calendar')
+  if (page === 'calendar' && !calendarSeen) setCalendarSeen(true)
   // Layouts of the design: three columns from 1100 px, map over data on tablets (600–1099 px), map with a sheet on phones.
   const desktop = useMediaQuery('(min-width: 1100px)')
   const wide = useMediaQuery('(min-width: 1280px)')
@@ -112,16 +147,10 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   const [toYear, setToYear] = useState<number | null>(null)
   const [drawMode, setDrawMode] = useState<DrawMode>('none')
   const [confirmBox, setConfirmBox] = useState(0)
-  const [biomes, setBiomes] = useState<BiomeData | null>(null)
   const [biomeBorders, setBiomeBorders] = useState(true)
   const [stateBorders, setStateBorders] = useState(false)
   const [places, setPlaces] = useState(false)
-  const [recurrence, setRecurrence] = useState<Recurrence | null>(null)
   const [period, setPeriod] = useState<[number, number]>([2016, 2025])
-  const [recent, setRecent] = useState<Recent | null>(null)
-  const [munis, setMunis] = useState<MuniRanking | null>(null)
-  const [oni, setOni] = useState<Oni | null>(null)
-  const [intensity, setIntensity] = useState<Intensity | null>(null)
 
   const load = useCallback(() => {
     setLoadError(null)
@@ -129,18 +158,22 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   }, [])
   useEffect(load, [load])
 
-  // spec 002 extras: optional files, loaded once the main data is in (a missing file just hides its view)
+  // spec 002 extras: optional files (a missing file just hides its view). The first screen needs the biomes (names,
+  // series and borders) and, with its layer on, the recurrence grid; the rest loads when its view opens, and the
+  // municipality ranking and intensity tables are also fetched once the first screen is idle.
+  const biomes = useExtra(loadBiomes, !!data, true)
+  const oni = useExtra(loadOni, !!data, true)
+  const recurrence = useExtra(loadRecurrence, !!data, layer === 'recurrence', true)
+  const recent = useExtra(loadRecent, !!data, layer === 'recent')
+  const firstScreen = biomes !== undefined && (layer !== 'recurrence' || recurrence !== undefined)
+  const munis = useExtra(loadMuniRanking, !!data && firstScreen, tab === 'ranking', true)
+  const intensity = useExtra(loadIntensity, !!data && firstScreen, tab === 'season', true)
   useEffect(() => {
-    if (!data) return
-    loadBiomes().then(setBiomes)
-    loadRecurrence().then((r) => { setRecurrence(r); if (r) setPeriod([Math.max(r.first, r.last - 9), r.last]) })
-    loadRecent().then(setRecent)
-    loadMuniRanking().then(setMunis)
-    loadOni().then(setOni)
-    loadIntensity().then(setIntensity)
-  }, [data])
+    if (recurrence) setPeriod([Math.max(recurrence.first, recurrence.last - 9), recurrence.last])
+  }, [recurrence])
 
-  useEffect(() => {
+  // before the effects of the map run: it reads the theme's colours from the CSS variables
+  useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme
     try { localStorage.setItem(THEME_KEY, theme) } catch { /* not persisted; still applied */ }
   }, [theme])
@@ -291,10 +324,10 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
 
   const filterProps = data && {
     data, area, onArea: chooseArea, drawMode, onDrawMode: startDraw, layer, onLayer: setLayer,
-    biomes: biomes?.list ?? [], munis, onPickMuni: pickMuni,
+    biomes: biomes?.list ?? [], munis: munis ?? null, onPickMuni: pickMuni,
     biomeBorders, onBiomeBorders: setBiomeBorders, stateBorders, onStateBorders: setStateBorders, places, onPlaces: setPlaces,
-    recurrenceYears: recurrence ? [recurrence.first, recurrence.last] as [number, number] : null, period, onPeriod: setPeriod,
-    recentSpan: recent ? i.t('dateRange', { a: recent.from, b: recent.to }) : null,
+    recurrenceYears: recurrence ? [recurrence.first, recurrence.last] as [number, number] : recurrence, period, onPeriod: setPeriod,
+    recentSpan: recent ? i.t('dateRange', { a: recent.from, b: recent.to }) : recent,
     view, onView: setView, sat, onSat: setSat,
     years, fromYear, toYear: endYear, onRange: (f: number, t: number) => { setFromYear(f); setToYear(t) },
     canDownload: !!series && !areaLoading, onDownload: download,
@@ -304,14 +337,25 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   // the phone sheet peeks at 300 px, less on short screens so the map keeps some room
   const peekHeight = Math.max(236, Math.min(300, Math.round(viewportH * 0.46)))
   const phoneInset = !phone ? 0 : drawing ? parseInt(SHEET_HEIGHT.draw, 10) : sheet === 'peek' ? peekHeight : 96
+  // the plain map follows the theme in place; the basemap has a style per theme, so it is rebuilt
+  const partFailed = (
+    <div role="alert" className="flex h-full flex-col items-start justify-center gap-3 bg-map-bg p-6 text-sm text-ink-2">
+      <p className="m-0 max-w-[40ch]">{i.t('partFailed')}</p>
+      <button type="button" className="btn" onClick={() => window.location.reload()}>{i.t('reload')}</button>
+    </div>
+  )
   const map = data && (
-    <MapView key={`${theme}-${places}`} theme={theme} places={places} states={data.states} stateCode={area.kind === 'state' ? area.uf : null}
-      ring={area.kind === 'ring' ? area.ring : null} bounds={areaBounds} drawMode={drawMode} onDrawn={onDrawn} confirmBox={confirmBox}
-      layer={layer} standings={standings} biomeStandings={biomeStandings} normalUnit={area.kind === 'biome' && biomes ? 'biome' : 'state'}
-      dateLabel={dateLabel} onPickState={pickState} onPickBiome={pickBiome} compact={phone} className="h-full"
-      biomes={biomes?.outlines ?? null} biomeId={area.kind === 'biome' ? area.id : null} biomeBorders={biomeBorders} stateBorders={stateBorders}
-      recurrence={recurrence} period={period} recent={recent} controls={!phone} touchControls={!desktop} onShowBrazil={() => chooseArea({ kind: 'country' })}
-      bottomInset={phoneInset} />
+    <LoadBoundary fallback={partFailed}>
+      <Suspense fallback={<div className="h-full bg-map-bg" />}>
+        <MapView key={places ? `places-${theme}` : 'plain'} theme={theme} places={places} states={data.states} stateCode={area.kind === 'state' ? area.uf : null}
+          ring={area.kind === 'ring' ? area.ring : null} bounds={areaBounds} drawMode={drawMode} onDrawn={onDrawn} confirmBox={confirmBox}
+          layer={layer} standings={standings} biomeStandings={biomeStandings} normalUnit={area.kind === 'biome' && biomes ? 'biome' : 'state'}
+          dateLabel={dateLabel} onPickState={pickState} onPickBiome={pickBiome} compact={phone} className="h-full"
+          biomes={biomes?.outlines ?? null} biomeId={area.kind === 'biome' ? area.id : null} biomeBorders={biomeBorders} stateBorders={stateBorders}
+          recurrence={recurrence ?? null} period={period} recent={recent ?? null} controls={!phone} touchControls={!desktop} onShowBrazil={() => chooseArea({ kind: 'country' })}
+          bottomInset={phoneInset} />
+      </Suspense>
+    </LoadBoundary>
   )
 
   const panelProps = data && {
@@ -319,9 +363,9 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
     data, series, loading: areaLoading, areaName: series?.name && (area.kind === 'state' || area.kind === 'biome') ? series.name : areaName,
     view, sat, fromYear, toYear: endYear, partialMonth, partialDays, dateLabel,
     tab, onTab: setTab, compare, onToggleCompare: toggleCompare, onSelectState: pickState, narrow: phone,
-    biomes, munis, onSelectBiome: pickBiome, onSelectMuni: pickMuni, seriesFor,
+    biomes: biomes ?? null, munis: munis ?? null, onSelectBiome: pickBiome, onSelectMuni: pickMuni, seriesFor,
     selectedKey: area.kind === 'state' ? area.uf : area.kind === 'biome' ? `bio:${area.id}` : null,
-    oni, intensity, areaKey,
+    oni: oni ?? null, intensity: intensity ?? null, areaKey,
   }
 
   const summary = status ? summaryText(status, dateLabel, i) : null
@@ -332,10 +376,18 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
     </p>
   )
 
+  const method = page === 'method' && (
+    <LoadBoundary fallback={<main className="h-[60dvh]">{partFailed}</main>}>
+      <Suspense fallback={<main className="p-6"><p className="py-12 text-ink-2" aria-busy="true">{i.t('loadingData')}</p></main>}>
+        <Method manifest={data?.manifest ?? null} repo={REPO} brazil={data?.areas.BR ?? null} phone={phone} />
+      </Suspense>
+    </LoadBoundary>
+  )
+
+  // The calendar page. It stays mounted, hidden, while the Method page shows: coming back does not rebuild the map
+  // (a WebGL context, its workers and about a second of work on a slow phone) and keeps its view, tab and scroll.
   let body: ReactNode
-  if (page === 'method') {
-    body = <Method manifest={data?.manifest ?? null} repo={REPO} brazil={data?.areas.BR ?? null} phone={phone} />
-  } else if (loadError) {
+  if (loadError) {
     body = (
       <main className="p-6" role="alert">
         <p className="text-ink-2">{i.t('loadError', { msg: loadError })}</p>
@@ -439,7 +491,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
       </main>
     )
   } else {
-    return (
+    body = (
       <PhoneLayout data={data} area={area} onArea={chooseArea} onPickMuni={pickMuni} name={areaName} kindLabel={kindLabel} dataDate={dataDate}
         summary={summary} percentile={status?.percentile ?? null} percentileText={status ? percentileText(status, i, true) : null}
         view={sheet} onView={setSheet} peekHeight={peekHeight} map={map} notices={notices}
@@ -448,9 +500,10 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
         canDownload={filterProps.canDownload} onDownload={download}
         drawMode={drawMode} onDrawMode={startDraw} onConfirmBox={() => setConfirmBox((n) => n + 1)}
         biomes={biomes?.list ?? []} standings={standings} biomeStandings={biomeStandings}
-        munis={munis} layer={layer} onLayer={setLayer} recurrenceYears={filterProps.recurrenceYears} period={period} onPeriod={setPeriod}
-        recentSpan={filterProps.recentSpan} values={view} onValues={setView} biomeBorders={biomeBorders} onBiomeBorders={setBiomeBorders}
-        stateBorders={stateBorders} onStateBorders={setStateBorders} places={places} onPlaces={setPlaces} lang={lang} onLang={onLang} />
+        munis={munis ?? null} layer={layer} onLayer={setLayer} recurrenceYears={filterProps.recurrenceYears} period={period} onPeriod={setPeriod}
+        recentSpan={filterProps.recentSpan} values={view} onValues={setView} sat={sat} onSat={setSat} biomeBorders={biomeBorders} onBiomeBorders={setBiomeBorders}
+        stateBorders={stateBorders} onStateBorders={setStateBorders} places={places} onPlaces={setPlaces} lang={lang} onLang={onLang}
+        theme={theme} onTheme={setTheme} />
     )
   }
 
@@ -465,12 +518,19 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
       </select>
     </label>
   )
+  const themeButton = (
+    <button type="button" className="ico !h-9 !w-9 max-[1100px]:!size-11" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+      aria-label={theme === 'dark' ? i.t('toLight') : i.t('toDark')}>
+      {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+    </button>
+  )
   const header = phone ? (
     page === 'method' ? (
       <header className="touch sticky top-0 z-20 flex h-16 items-center gap-2 border-b border-line bg-surface pr-4 pl-1">
         <a href="#" className="ico !border-0 !bg-transparent !text-ink" aria-label={i.t('backToMap')}><ChevronLeft size={22} aria-hidden="true" /></a>
         <span className="flex-1 text-lg font-semibold">{i.t('navMethod')}</span>
         {langSelect}
+        {themeButton}
       </header>
     ) : null
   ) : (
@@ -493,10 +553,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
         <a href="#method" className={navLink} aria-current={page === 'method' ? 'page' : undefined}>{i.t('navMethod')}</a>
       </nav>
       {langSelect}
-      <button type="button" className="ico !h-9 !w-9 max-[1100px]:!size-11" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        aria-label={theme === 'dark' ? i.t('toLight') : i.t('toDark')}>
-        {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
-      </button>
+      {themeButton}
       <a className="inline-flex min-h-9 items-center text-[13px] text-link no-underline hover:underline max-[1100px]:-mx-1.5 max-[1100px]:min-h-11 max-[1100px]:min-w-11 max-[1100px]:justify-center max-[1100px]:px-1.5" href={REPO} target="_blank" rel="noreferrer">
         {i.t('code')}<span className="sr-only">{i.t('codeSr')}</span>
       </a>
@@ -506,7 +563,9 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   return (
     <>
       {header}
-      {body}
+      {method}
+      {/* display: contents keeps the layouts' own boxes; [hidden] wins over it (Tailwind preflight, !important) */}
+      {calendarSeen && <div className="contents" hidden={page === 'method'}>{body}</div>}
     </>
   )
 }

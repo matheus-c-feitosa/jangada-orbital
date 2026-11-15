@@ -44,8 +44,8 @@
     },
     "biomes": {
       "path": "biomes.geojson",
-      "bytes": 500340,
-      "sha256": "9bca35c52661319308215dfab22e415a713cc6b51f461db8295129c229fd99e7"
+      "bytes": 447699,
+      "sha256": "afcbdd1270e4e1e37bfeb8185191082e7b130ae38d216b991923738ec73d43be"
     },
     "biome_series": {
       "path": "biome_series.json",

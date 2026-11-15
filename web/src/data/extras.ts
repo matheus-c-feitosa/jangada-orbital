@@ -1,16 +1,24 @@
 // Extra data files of spec 002, written by `uv run jangada-extras` (pipeline/src/jangada/extras.py).
-// Each loads on first use and is cached; a missing file (an older export) resolves to null, so the views that need it
-// simply do not show.
+// Each loads the first time a view needs it and is cached; a missing file (an older export) resolves to null, so the
+// views that need it simply do not show.
 import { dataUrl, type AreaSeries, type Satellite } from './load'
 
 const cache = new Map<string, Promise<unknown>>()
 
+/** A 404 (file not published) is remembered; a network or server error is not, so the next call tries again. */
 function optional<T>(file: string): Promise<T | null> {
   let p = cache.get(file) as Promise<T | null> | undefined
   if (!p) {
     p = fetch(dataUrl(file))
-      .then((r) => (r.ok ? (r.json() as Promise<T>) : null))
-      .catch(() => null)
+      .then((r) => {
+        if (r.ok) return r.json() as Promise<T>
+        if (r.status !== 404) cache.delete(file)
+        return null
+      })
+      .catch(() => {
+        cache.delete(file)
+        return null
+      })
     cache.set(file, p)
   }
   return p
@@ -139,13 +147,15 @@ type RawRecent = Omit<Recent, 'cells'> & { satellites: string[]; cells: [number,
 /** Expands day offsets and satellite bits of recent.json. */
 export function decodeRecent(doc: RawRecent): Recent {
   const start = Date.parse(`${doc.from}T00:00:00Z`)
-  const day = (d: number) => new Date(start + d * 86_400_000).toISOString().slice(0, 10)
+  // a week has seven days: build each date string once, not twice per cell (10 thousand cells)
+  const days: string[] = []
+  const day = (d: number) => (days[d] ??= new Date(start + d * 86_400_000).toISOString().slice(0, 10))
   const { satellites, cells, ...rest } = doc
+  const names: string[] = []
+  const sats = (bits: number) => (names[bits] ??= satellites.filter((_, i) => (bits >> i) & 1).join(','))
   return {
     ...rest,
-    cells: cells.map(([la, lo, n, eq, frp, f, l, bits, above]) => [
-      la, lo, n, eq, frp, day(f), day(l), satellites.filter((_, i) => (bits >> i) & 1).join(','), above === 1,
-    ]),
+    cells: cells.map(([la, lo, n, eq, frp, f, l, bits, above]) => [la, lo, n, eq, frp, day(f), day(l), sats(bits), above === 1]),
   }
 }
 

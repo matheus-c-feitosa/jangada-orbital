@@ -1,6 +1,5 @@
 // Monthly series for a drawn area. The browser fetches whole 2° x 2° tile files (web/public/data/tiles/), not byte
 // ranges: GitHub Pages gzips .parquet responses, and gzip breaks HTTP range requests on the original file.
-import { parquetReadObjects } from 'hyparquet'
 import { SATELLITES, dataUrl, type AreaSeries, type Manifest, type Satellite } from './load'
 import { cellKey, cellsInRing, ringAreaKm2, tilesForBox, type Ring } from '../geo/aoi'
 
@@ -14,7 +13,9 @@ function readTile(kind: 'h' | 'o', id: string): Promise<Record<string, unknown>[
     p = (async () => {
       const response = await fetch(dataUrl(`tiles/${key}.parquet`))
       if (!response.ok) throw new Error(`tile ${key}: HTTP ${response.status}`)
-      return parquetReadObjects({ file: await response.arrayBuffer() })
+      // the Parquet reader is only needed for drawn or typed areas: its own chunk, loaded with the first tile
+      const [{ parquetReadObjects }, file] = await Promise.all([import('hyparquet'), response.arrayBuffer()])
+      return parquetReadObjects({ file })
     })()
     p.catch(() => cache.delete(key))
     cache.set(key, p)
