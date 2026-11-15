@@ -70,10 +70,17 @@ export function CircleForm({ onArea }: { onArea: (a: Area) => void }) {
   return (
     <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); apply() }}>
       <span className="text-xs text-ink-3">{i.t('orPoint')}</span>
-      <div className="grid grid-cols-[1fr_1fr_0.8fr] gap-2">
-        <input className="ctl" aria-label={i.t('latitude')} inputMode="decimal" value={circle.lat} onChange={(e) => setCircle({ ...circle, lat: e.target.value })} />
-        <input className="ctl" aria-label={i.t('longitude')} inputMode="decimal" value={circle.lon} onChange={(e) => setCircle({ ...circle, lon: e.target.value })} />
-        <input className="ctl" aria-label={i.t('radiusKm')} inputMode="decimal" value={circle.km} onChange={(e) => setCircle({ ...circle, km: e.target.value })} />
+      {/* visible labels: a placeholder-less number field does not say what it holds */}
+      <div className="grid grid-cols-[1fr_1fr_0.8fr] items-end gap-2">
+        <label className="flex min-w-0 flex-col gap-1 text-xs text-ink-3">{i.t('latitude')}
+          <input className="ctl" inputMode="decimal" value={circle.lat} onChange={(e) => setCircle({ ...circle, lat: e.target.value })} />
+        </label>
+        <label className="flex min-w-0 flex-col gap-1 text-xs text-ink-3">{i.t('longitude')}
+          <input className="ctl" inputMode="decimal" value={circle.lon} onChange={(e) => setCircle({ ...circle, lon: e.target.value })} />
+        </label>
+        <label className="flex min-w-0 flex-col gap-1 text-xs text-ink-3">{i.t('radiusKm')}
+          <input className="ctl" inputMode="decimal" value={circle.km} onChange={(e) => setCircle({ ...circle, km: e.target.value })} />
+        </label>
       </div>
       <button type="submit" className="btn"><Crosshair size={16} aria-hidden="true" /> {i.t('useCircle')}</button>
       {error && <p className="m-0 text-[13px] text-unusual" role="alert">{error}</p>}
@@ -295,6 +302,13 @@ export function AreaPanel(p: Props) {
           </button>
         </>
       )}
+      {/* the CSV holds monthly counts; single detections need the FIRMS archive (and a key that never reaches this site) */}
+      <p className="m-0 text-xs leading-snug text-ink-3">
+        {i.t('hotspotsNeed')}{' '}
+        <a className="text-link underline underline-offset-2" href="https://firms.modaps.eosdis.nasa.gov/download/" target="_blank" rel="noreferrer">
+          {i.t('hotspotsLink')}<span className="sr-only"> {i.t('newTab')}</span>
+        </a>
+      </p>
     </div>
   )
 }
