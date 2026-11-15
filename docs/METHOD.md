@@ -78,6 +78,28 @@ Possible improvements:
 - **Density:** detections per 1,000 km². Areas are geodesic: on the WGS84 ellipsoid for Brazil and states (IBGE
   outlines, within 0.2% of IBGE's official areas), and on a sphere for drawn shapes, circles and municipalities.
 
+## Spec 002 data (`uv run jangada-extras`)
+
+- **Biomes:** IBGE biomes map 1:250,000 (2019). A 0.1° cell belongs to the biome that contains its centre, or the
+  nearest one on the coast; the six biomes add up exactly to Brazil.
+- **Fire recurrence:** a cell-year counts as "had fire" when its harmonized value reaches 0.5 Aqua-MODIS-equivalent
+  detections, so a single small VIIRS pixel in a converted year does not count as a fire year. The app lets the period
+  change; it defaults to the last ten complete years.
+- **Municipality ranking:** cells whose centre falls inside the IBGE outline (no nearest fallback, so 290 very small
+  municipalities have no cell); percentile with the same rule as the state ranking.
+- **Validation scatter:** the held-out fit of `jangada-harmonize` recomputed from the published observed counts; it
+  reproduces the published metrics.
+- **El Niño / La Niña:** NOAA CPC Oceanic Niño Index. A phase needs five consecutive overlapping seasons at or beyond
+  ±0.5 °C; a year takes the phase that covers at least three of its seasons.
+- **Last 7 days:** FIRMS near-real-time South America files (no key), clipped to the states of Brazil, without
+  low-confidence detections or known static sources. The Aqua-MODIS equivalent uses the mean of NOAA-20 and NOAA-21
+  ~1 km positions times each state's ratio of harmonized value to that mean over the last 12 months. "More than usual"
+  means above the cell's 90th percentile for this month (2003–2023), scaled to 7 days, and at least 2. The layer is
+  frozen at the time of the export.
+- **Fire intensity:** median fire radiative power per detection and night share per year, Aqua MODIS and S-NPP VIIRS
+  apart (never harmonized, never mixed); years with fewer than 20 detections are drawn hollow.
+- **Overpass time:** median local solar time (UTC + longitude / 15) of daytime detections per satellite and year.
+
 ## Why stop using Aqua in 2024
 
 From 2024 the VIIRS/Aqua ratio falls from about 4.0 to 3.3–3.6, while S-NPP and NOAA-20 agree within ~3%.

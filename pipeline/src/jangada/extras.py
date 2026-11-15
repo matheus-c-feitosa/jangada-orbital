@@ -221,8 +221,31 @@ def recurrence(con) -> None:
         SELECT cell_lat, cell_lon, sum(1::BIGINT << (y - {first}))::BIGINT AS mask
         FROM y GROUP BY ALL ORDER BY cell_lat, cell_lon""").fetchall()
     write_json("recurrence.json", {"grid_deg": 0.1, "first": first, "last": last, "threshold": FIRE_MIN,
-                                   "cells": [[la, lo, m] for la, lo, m in rows]})
+                                   "encoding": "rows[cell_lat] = 'dlon.mask,...': dlon = cell_lon minus the previous "
+                                               "cell's (the first is absolute), mask in base 36, bit 0 = first year",
+                                   "rows": encode_rows(rows)})
     log(f"recurrence: {len(rows):,} cells with fire in at least one year {first}-{last}")
+
+
+def _b36(n: int) -> str:
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    out = ""
+    while True:
+        n, r = divmod(n, 36)
+        out = digits[r] + out
+        if not n:
+            return out
+
+
+def encode_rows(rows) -> dict[str, str]:
+    """[(cell_lat, cell_lon, mask)] sorted by lat, lon -> {cell_lat: "dlon.mask36,..."} (about a third of plain JSON)."""
+    out: dict[str, list[str]] = {}
+    prev: dict[int, int] = {}
+    for la, lo, m in rows:
+        d = lo - prev[la] if la in prev else lo
+        prev[la] = lo
+        out.setdefault(str(la), []).append(f"{d}.{_b36(int(m))}")
+    return {k: ",".join(v) for k, v in out.items()}
 
 
 # ---------------------------------------------------------------- municipalities
@@ -403,11 +426,16 @@ def recent(con) -> None:
         FROM agg a LEFT JOIN eq e USING (cell_lat, cell_lon) LEFT JOIN hist h USING (cell_lat, cell_lon)
         ORDER BY a.n DESC""").fetchall()
     span = con.execute("SELECT strftime(min(acq_date), '%Y-%m-%d'), strftime(max(acq_date), '%Y-%m-%d'), count(*) FROM rb").fetchone()
+    start = date.fromisoformat(span[0])
+    day = lambda d: (date.fromisoformat(d) - start).days  # noqa: E731
+    bits = lambda sats: sum(1 << SAT_CODE[x] for x in sats if x in SAT_CODE)  # noqa: E731
     write_json("recent.json", {
         "from": span[0], "to": span[1], "detections": span[2], "downloaded": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()),
         "note": "FIRMS near-real-time, last 7 days; Aqua-MODIS equivalent from NOAA-20/21 with each state's ratio of the last 12 months",
-        "columns": ["cell_lat", "cell_lon", "n", "aqua_eq", "frp_max", "first", "last", "satellites", "above_usual"],
-        "cells": [[la, lo, n, eq, frp, f, l, ",".join(s), bool(ab)] for la, lo, n, eq, frp, f, l, s, ab in rows]})
+        "satellites": list(SAT_CODE),
+        "columns": ["cell_lat", "cell_lon", "n", "aqua_eq", "frp_max", "first_day", "last_day", "satellite_bits", "above_usual"],
+        "cells": [[la, lo, n, round(eq, 1), round(frp or 0), day(f), day(l), bits(s), 1 if ab else 0]
+                  for la, lo, n, eq, frp, f, l, s, ab in rows]})
     log(f"recent: {span[2]:,} detections in Brazil, {span[0]} to {span[1]}, {len(rows):,} cells")
 
 

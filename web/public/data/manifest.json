@@ -39,8 +39,8 @@
     },
     "recurrence": {
       "path": "recurrence.json",
-      "bytes": 1119974,
-      "sha256": "405dcd5a2cabed1cbe40249b561eb28766dfe81556487b9f25f356e6b6bad623"
+      "bytes": 440311,
+      "sha256": "684988365a838c73edb232d18a1aef27ed9109eb6b24d1ec0da27e823de13463"
     },
     "biomes": {
       "path": "biomes.geojson",
@@ -69,8 +69,8 @@
     },
     "recent": {
       "path": "recent.json",
-      "bytes": 702395,
-      "sha256": "04a657412dcb837cb004c592a1c4c8690c5be1816f0acfa2bcce4e0f531fd975"
+      "bytes": 288820,
+      "sha256": "6d0ec50ee846a49df7c946e12cbf6ec6301bbb8edf4d762a52d6a600b97ea35f"
     },
     "intensity": {
       "path": "intensity.json",

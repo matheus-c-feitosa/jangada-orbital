@@ -49,7 +49,31 @@ export interface Recurrence {
   /** [cell_lat, cell_lon, bit mask of years with fire, bit 0 = `first`] */
   cells: [number, number, number][]
 }
-export const loadRecurrence = () => optional<Recurrence>('recurrence.json')
+
+/** Decodes the rows of recurrence.json: {cell_lat: "dlon.mask36,..."}, dlon relative to the previous cell. */
+export function decodeRows(rows: Record<string, string>): [number, number, number][] {
+  const out: [number, number, number][] = []
+  for (const [lat, line] of Object.entries(rows)) {
+    const la = Number(lat)
+    let lo = 0
+    line.split(',').forEach((item, i) => {
+      const [d, m] = item.split('.')
+      lo = i === 0 ? Number(d) : lo + Number(d)
+      out.push([la, lo, parseInt(m, 36)])
+    })
+  }
+  return out
+}
+
+export async function loadRecurrence(): Promise<Recurrence | null> {
+  const doc = await optional<Omit<Recurrence, 'cells'> & { rows: Record<string, string> }>('recurrence.json')
+  if (!doc) return null
+  const { rows, ...rest } = doc
+  return { ...rest, cells: decodeRows(rows) }
+}
+
+/** class 1..7 of the orange ramp for `n` of `span` years with fire (0 = none) */
+export const recurrenceClass = (n: number, span: number) => (n <= 0 ? 0 : Math.max(1, Math.min(7, Math.ceil((n / span) * 7))))
 
 /** Years with fire in `from`..`to` for one cell mask. */
 export function yearsWithFire(mask: number, first: number, from: number, to: number): number {
@@ -95,7 +119,26 @@ export interface Recent {
   /** [cell_lat, cell_lon, n, aqua_eq, frp_max, first, last, satellites, above_usual] */
   cells: [number, number, number, number, number, string, string, string, boolean][]
 }
-export const loadRecent = () => optional<Recent>('recent.json')
+
+type RawRecent = Omit<Recent, 'cells'> & { satellites: string[]; cells: [number, number, number, number, number, number, number, number, number][] }
+
+/** Expands day offsets and satellite bits of recent.json. */
+export function decodeRecent(doc: RawRecent): Recent {
+  const start = Date.parse(`${doc.from}T00:00:00Z`)
+  const day = (d: number) => new Date(start + d * 86_400_000).toISOString().slice(0, 10)
+  const { satellites, cells, ...rest } = doc
+  return {
+    ...rest,
+    cells: cells.map(([la, lo, n, eq, frp, f, l, bits, above]) => [
+      la, lo, n, eq, frp, day(f), day(l), satellites.filter((_, i) => (bits >> i) & 1).join(','), above === 1,
+    ]),
+  }
+}
+
+export async function loadRecent(): Promise<Recent | null> {
+  const doc = await optional<RawRecent>('recent.json')
+  return doc ? decodeRecent(doc) : null
+}
 
 export interface Intensity {
   small_sample: number

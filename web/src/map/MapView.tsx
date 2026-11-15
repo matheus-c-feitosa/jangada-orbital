@@ -7,7 +7,7 @@ import { TerraDraw, TerraDrawPolygonMode, TerraDrawRectangleMode } from 'terra-d
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter'
 import { Flame, X } from 'lucide-react'
 import type { Ring } from '../geo/aoi'
-import { yearsWithFire, type Recent, type Recurrence } from '../data/extras'
+import { recurrenceClass, yearsWithFire, type Recent, type Recurrence } from '../data/extras'
 import { ordinal, percentileClass, PERCENTILE_LABEL } from '../rank/ranking'
 
 export type DrawMode = 'none' | 'rectangle' | 'polygon'
@@ -77,8 +77,6 @@ function anomalyColor(standings: Record<string, StateStanding>): ExpressionSpeci
   return (pairs.length ? ['match', ['get', 'uf'], ...pairs, cssVar('--surface-2')] : ['to-color', cssVar('--surface-2')]) as ExpressionSpecification
 }
 
-/** class 1..7 of the orange ramp for `n` of `span` years with fire (0 = none) */
-export const recurrenceClass = (n: number, span: number) => (n <= 0 ? 0 : Math.max(1, Math.min(7, Math.ceil((n / span) * 7))))
 
 /** The recurrence grid as one image (one pixel per 0.1° cell), drawn on a canvas and placed over Brazil. */
 function recurrenceImage(r: Recurrence, from: number, to: number) {
@@ -208,6 +206,7 @@ export function MapView(p: Props) {
       pitchWithRotate: false,
     })
     mapRef.current = map
+    if (import.meta.env.DEV) (window as unknown as { __map?: MapLibre }).__map = map // inspection in dev only
     // the map lives in panels that open, close and resize; keep the canvas in step with its box
     // and keep the selected area framed when the box changes (panels opening, phone rotation)
     let frame = 0
