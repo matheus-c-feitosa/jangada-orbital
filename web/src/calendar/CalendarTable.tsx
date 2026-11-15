@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { ImageDown } from 'lucide-react'
 import { classBreaks, classOf, compareMonth, daysIn, type MonthComparison } from './stats'
 import type { OniPhase } from '../data/extras'
 import { useI18n, type I18n, type Key } from '../i18n'
@@ -18,6 +19,9 @@ interface Props {
   harmonized: boolean
   /** source per month: 0 Aqua observed, 1 Terra converted, 2 VIIRS converted */
   source: number[]
+  /** uncertainty range of the harmonized values (equal to the value in observed Aqua months) */
+  lo?: number[]
+  hi?: number[]
   fromYear: number
   toYear: number
   /** "YYYY-MM" of the partial last month and how many days it covers */
@@ -31,6 +35,8 @@ interface Props {
   onClimate?: (on: boolean) => void
   /** phone: taller cells */
   compact?: boolean
+  /** "Download image": the title, sentences and footer of the PNG, and its file name */
+  image?: { title: string; lines: string[]; footer: string[] }
 }
 
 interface Cell {
@@ -41,6 +47,8 @@ interface Cell {
   unusual: boolean
   source: number | null
   future: boolean
+  /** converted months (Terra, VIIRS) of the harmonized view: the likely range of the estimate */
+  range: [number, number] | null
 }
 
 interface CellProps {
@@ -76,7 +84,7 @@ const CalendarCell = memo(function CalendarCell({ c, active, label, partial, cel
 })
 
 /** Year × month table of the design's "Calendar" tab. One tab stop; arrow keys move between cells (roving tabindex). */
-export function CalendarTable({ months, values, harmonized, source, fromYear, toYear, partialMonth, partialDays, caption, oni, climateAvailable, climate, onClimate, compact }: Props) {
+export function CalendarTable({ image, months, values, harmonized, source, lo, hi, fromYear, toYear, partialMonth, partialDays, caption, oni, climateAvailable, climate, onClimate, compact }: Props) {
   const i = useI18n()
   const [active, setActive] = useState<string>(partialMonth)
   const buttons = useRef(new Map<string, HTMLButtonElement>())
@@ -101,12 +109,15 @@ export function CalendarTable({ months, values, harmonized, source, fromYear, to
         if (harmonized && k !== undefined && value !== null) {
           unusual = compareMonth(months, numeric, k, key === partialMonth ? partialDays : daysIn(key)).unusual
         }
-        row.push({ month: key, index: k, value, cls: value === null ? -1 : classOf(value, breaks), unusual, source: k !== undefined ? source[k] : null, future: key > partialMonth })
+        // honest harmonization (constitution, principle III): an estimate shows its range
+        const estimated = harmonized && k !== undefined && value !== null && source[k] > 0 && lo && hi
+        const range: [number, number] | null = estimated ? [lo[k!], hi[k!]] : null
+        row.push({ month: key, index: k, value, cls: value === null ? -1 : classOf(value, breaks), unusual, source: k !== undefined ? source[k] : null, future: key > partialMonth, range })
       }
       grid.push(row)
     }
     return { grid, breaks }
-  }, [months, values, numeric, harmonized, source, fromYear, toYear, partialMonth, partialDays])
+  }, [months, values, numeric, harmonized, source, lo, hi, fromYear, toYear, partialMonth, partialDays])
 
   const flat = useMemo(() => grid.flat(), [grid])
   const activeCell = flat.find((c) => c.month === active && c.value !== null) ?? flat.filter((c) => c.value !== null).pop() ?? flat[0]
@@ -142,7 +153,9 @@ export function CalendarTable({ months, values, harmonized, source, fromYear, to
     const [y, m] = c.month.split('-').map(Number)
     const when = `${i.monthShort(m - 1)} ${y}`
     if (c.value === null) return `${when}: ${c.future ? i.t('noDataYet') : i.t('noData')}`
-    const parts = [`${when}: ${i.t('nDetections', { n: i.int(c.value) })}`]
+    const parts = [c.range
+      ? `${when}: ${i.t('aboutN', { d: i.det(c.value) })}, ${i.t('likelyRange', { lo: i.int(c.range[0]), hi: i.int(c.range[1]) })}`
+      : `${when}: ${i.det(c.value)}`]
     if (c.month === partialMonth) parts.push(i.t('partialDays', { d: partialDays }))
     if (c.unusual) parts.push(i.t('unusualMonth'))
     if (harmonized && c.source !== null) parts.push(i.t(SOURCE_KEY[c.source]))
@@ -162,7 +175,8 @@ export function CalendarTable({ months, values, harmonized, source, fromYear, to
     const ratio = cmp && cmp.ratio !== null ? i.one(cmp.ratio) : null
     return (
       <>
-        <strong>{i.monthShort(m - 1)} {y}</strong>: {i.t('nDetections', { n: i.int(c.value) })}{partial ? i.t('firstDays', { d: partialDays }) : ''}
+        <strong>{i.monthShort(m - 1)} {y}</strong>: {c.range ? <>≈ {i.det(c.value)} <span className="whitespace-nowrap">({i.int(c.range[0])}–{i.int(c.range[1])})</span></> : i.det(c.value)}
+        {partial ? i.t('firstDays', { d: partialDays }) : ''}
         {harmonized && c.source !== null ? `, ${i.t(SOURCE_KEY[c.source])}` : ''}.
         {cmp && ratio !== null && <> {cmp.partial ? i.t('ratioPace', { r: ratio }) : i.t('ratioMonth', { r: ratio, month: i.monthLong(m - 1) })}</>}
         {cmp && ratio === null && cmp.value > 0 && <> {i.t('noneUsually', { month: i.monthLong(m - 1) })}</>}
@@ -172,6 +186,36 @@ export function CalendarTable({ months, values, harmonized, source, fromYear, to
   }
 
   const top = breaks.length ? breaks[breaks.length - 1] : 0
+
+  // "Download image": the same grid and words as the screen, as a PNG
+  const [saving, setSaving] = useState(false)
+  const [imageError, setImageError] = useState(false)
+  const saveImage = async () => {
+    if (!image) return
+    setSaving(true)
+    setImageError(false)
+    try {
+      // its own chunk: only someone who saves the picture needs it
+      const { calendarSvg, downloadPng, imageFileName, readColors } = await import('./exportImage')
+      const { svg, width, height } = calendarSvg({
+        title: image.title, lines: image.lines, caption, grid, breaks, partialMonth, harmonized, footer: image.footer, colors: readColors(),
+        words: {
+          months: Array.from({ length: 12 }, (_, k) => i.monthShort(k)[0]).join(''),
+          estimated: i.t('estShort'),
+          noDetections: i.t('legendNone'),
+          scale: (low, high) => i.t('imageScale', { low, high }),
+          unusual: i.t('above90Long'),
+          partial: i.t('partialPeriod'),
+          format: i.int,
+        },
+      })
+      await downloadPng(svg, width, height, imageFileName(image.title, fromYear, toYear))
+    } catch {
+      setImageError(true)
+    } finally {
+      setSaving(false)
+    }
+  }
   const cellH = compact ? 'h-[18px]' : 'h-3'
 
   return (
@@ -242,6 +286,14 @@ export function CalendarTable({ months, values, harmonized, source, fromYear, to
         {harmonized && <span>{i.t('greyYears')}</span>}
         {oni && <span>{i.t('oniNote')}</span>}
       </div>
+      {image && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className="btn !min-h-11 !rounded-[10px]" onClick={saveImage} disabled={saving}>
+            <ImageDown size={18} aria-hidden="true" /> {i.t('downloadImage')}
+          </button>
+          {imageError && <span className="text-xs text-unusual" role="alert">{i.t('imageFailed')}</span>}
+        </div>
+      )}
     </div>
   )
 }

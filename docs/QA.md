@@ -49,6 +49,6 @@ These tests pass:
 
 | Suite | Result |
 |---|---|
-| Vitest | 60 passed |
-| Playwright | 26 passed |
-| pytest | 41 passed |
+| Vitest | 72 passed |
+| Playwright | 28 passed |
+| pytest | 44 passed |

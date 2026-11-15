@@ -106,6 +106,37 @@ test('drawing a rectangle on the map loads that area', async ({ page }) => {
   await expect(page.getByRole('table', { name: /Fire detections per month/ })).toBeVisible()
 })
 
+test('the calendar names the busiest periods, shows the range of estimates and saves as an image', async ({ page }) => {
+  await page.goto('./')
+  const peaks = page.getByRole('region', { name: /^Busiest periods, 2001 to/ })
+  await expect(peaks).toBeVisible({ timeout: 30_000 })
+  await expect(peaks.getByText('Busiest year')).toBeVisible()
+  await expect(peaks.getByText('Highest month')).toBeVisible()
+  await expect(peaks.getByText('Usually busiest months')).toBeVisible()
+  // converted months are estimates and carry their range; observed Aqua months do not
+  const calendar = page.getByRole('table', { name: /Fire detections per month/ })
+  await expect(calendar.getByRole('button', { name: /^Jan 2024: about .+, likely .+ to / })).toHaveCount(1)
+  await expect(calendar.getByRole('button', { name: /^Jan 2010: \d/ })).toHaveCount(1)
+  await expect(page.locator('p[aria-live="polite"]').first()).toContainText('≈')
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download image' }).click()
+  expect((await download).suggestedFilename()).toMatch(/^jangada-orbital-calendar_brazil_2001-\d{4}\.png$/)
+})
+
+test('an area smaller than one grid cell uses the cell around it and says so', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.getByRole('button', { name: 'Download CSV' })).toBeEnabled({ timeout: 30_000 })
+  await page.getByRole('combobox', { name: 'Area' }).selectOption('drawn')
+  // a 5 km circle on a cell corner near Crato (CE): the nearest 0.1° cell centres are about 7.9 km away
+  await page.getByRole('textbox', { name: 'Latitude' }).fill('-7.20')
+  await page.getByRole('textbox', { name: 'Longitude' }).fill('-39.40')
+  await page.getByRole('textbox', { name: 'Radius in km' }).fill('5')
+  await page.getByRole('button', { name: /Use lat, lon, radius/ }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'smaller than one 0.1° grid cell' })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/outside Brazil/)).toHaveCount(0)
+  await expect(page.getByRole('table', { name: /Fire detections per month/ })).toBeVisible()
+})
+
 test('coming back from the Method page keeps the same map and the open tab', async ({ page }) => {
   await page.goto('./')
   await expect(page.locator('.maplibregl-canvas')).toBeVisible({ timeout: 30_000 })

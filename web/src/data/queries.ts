@@ -1,7 +1,10 @@
 // Monthly series for a drawn area. The browser fetches whole 2° x 2° tile files (web/public/data/tiles/), not byte
 // ranges: GitHub Pages gzips .parquet responses, and gzip breaks HTTP range requests on the original file.
 import { SATELLITES, dataUrl, type AreaSeries, type Manifest, type Satellite } from './load'
-import { cellKey, cellsInRing, ringAreaKm2, tilesForBox, type Ring } from '../geo/aoi'
+import { cellAreaKm2, cellKey, cellOfKey, cellsInRing, ringAreaKm2, tilesForBox, type Ring } from '../geo/aoi'
+
+/** A drawn-area series: how many grid cells it holds, and whether a tiny area fell back to the one cell around it. */
+export type RingSeries = AreaSeries & { cells: number; approximate: boolean }
 
 const cache = new Map<string, Promise<Record<string, unknown>[]>>()
 
@@ -37,12 +40,12 @@ export async function seriesForRing(
   name: string,
   template: AreaSeries,
   manifest: Manifest,
-): Promise<AreaSeries & { cells: number }> {
-  const { cells, box } = cellsInRing(ring)
+): Promise<RingSeries> {
+  const { cells, box, approximate } = cellsInRing(ring)
   const months = template.months
   const index = new Map(months.map((m, i) => [m, i]))
   const zeros = () => months.map(() => 0)
-  const out: AreaSeries & { cells: number } = {
+  const out: RingSeries = {
     name,
     months,
     source: template.source,
@@ -54,7 +57,9 @@ export async function seriesForRing(
       SATELLITES.map((s) => [s, template.observed[s].map((v) => (v === null ? null : 0))]),
     ) as Record<Satellite, (number | null)[]>,
     cells: cells.size,
-    area_km2: ringAreaKm2(ring),
+    approximate,
+    // the counts come from whole cells, so the density divides by the cell's area when the area is smaller than one
+    area_km2: approximate ? cellAreaKm2(cellOfKey([...cells][0])[0]) : ringAreaKm2(ring),
   }
   if (!box) return out
   const available = new Set(manifest.tiles.ids)

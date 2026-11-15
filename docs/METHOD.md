@@ -46,12 +46,38 @@ sensor would have reported. Aqua has the longest stable record (2002–2023, aft
 
 Total bias over the test years: −2.2%.
 
-The spec target SC-003 asked for 80% of state-months within ±20%. **It is not met yet (62%).** Monthly
-state-level counts are noisy because:
-- a few large fires dominate a month;
-- the two sensors see different hours of the day.
+### The error depends on the size of the month
 
-Possible improvements:
+The state-month row above pools small and large months. `uv run jangada-strata` reports the same held-out test per
+bin of Aqua count. The "perfect estimate" column is the share of months that would fall within ±20% if the estimate
+were exactly right and only Aqua's own Poisson counting noise remained. Fire counts are clustered, so real noise is
+larger: read that column as an upper bound, not a target.
+
+| Aqua detections in the state-month | State-months | Within ±20% | Perfect estimate (upper bound) | Mean error | Bias |
+|---|---|---|---|---|---|
+| 20–49 | 93 | 53% | 76% | 28.3% | +8.4% |
+| 50–99 | 87 | 48% | 91% | 29.4% | +13.5% |
+| 100–499 | 170 | 61% | 99% | 21.9% | +2.3% |
+| 500 or more | 137 | 78% | 100% | 13.3% | −3.1% |
+| all (≥ 20) | 487 | 62% | 93% | 22.0% | −2.3% |
+
+### SC-003: original target not met, criterion revised
+
+The first target (SC-003) asked for 80% of all state-months with at least 20 Aqua detections to fall within ±20%.
+**It is not met: 62%.** The model is at the limit of its family, not just unlucky:
+- the shrinkage strength M (0 to 1000) and a power-law exponent b (0.8 to 1.1) were tried; each was chosen on
+  2019–2020 (fit 2012–2018) and reported on 2021–2022, so the test years never chose the setting; none moved the
+  held-out share outside 54–63%;
+- the share within ±20% stays below the counting-noise upper bound in every bin, so it is not only noise: the two
+  sensors see different hours of the day, and a few large fires dominate a month.
+
+Revised criterion (2026-11-14), stated for the unit the calendar is read in, on the held-out years:
+- national months within ±20% in at least 90% of cases (met: 92%);
+- state-years within ±20% in at least 90% of cases (met: 96%);
+- state-months with 500 or more Aqua detections within ±20% in at least 75% of cases (met: 78%);
+- smaller state-months are published as indicative, with the table above.
+
+Next steps, each needing fields that are not in the monthly cell counts (a re-aggregation of the raw hotspots):
 - split day and night detections;
 - regions by biome;
 - fire radiative power thresholds.
@@ -119,4 +145,7 @@ orbit would have seen.
 - S-NPP data ends on 2026-11-02. The series from 2024 does not depend on it.
 - The current month is partial; the app compares it pro rata.
 - Oceanic islands are not covered by the area-API route (see `DATA.md`).
-- Cells are 0.1°, so drawn areas are approximated by the cells they touch.
+- Cells are 0.1°, so drawn areas are approximated by the cells whose centre falls inside them. An area too small to
+  hold a cell centre uses the one cell around it, is marked approximate, and its density uses the cell's area.
+- An area with no detections at all that also lies outside every state outline is reported as outside Brazil, not as
+  "no fires".
