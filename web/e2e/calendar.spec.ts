@@ -18,9 +18,43 @@ test('the calendar for Brazil loads from the static data files', async ({ page }
   await expect(calendar).toBeVisible()
   await expect(calendar.getByRole('rowheader', { name: /^2001/ })).toBeVisible()
   await expect(calendar.getByRole('columnheader')).toHaveCount(12)
-  await expect(page.getByRole('heading', { level: 2, name: /so far$/ })).toBeVisible()
-  await expect(page.getByRole('heading', { level: 2, name: 'Fire-season rhythm' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Total per year' })).toBeVisible()
   await expect(page.getByText(/detections per 1,000 km²/)).toBeVisible()
+  // the other views are tabs of the data column (new UI, spec 002)
+  await page.getByRole('tab', { name: /so far$/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: /so far$/ })).toBeVisible()
+  await page.getByRole('tab', { name: 'Season' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Fire-season rhythm' })).toBeVisible()
+})
+
+test('yearly totals show the conversion range in a table for screen readers', async ({ page }) => {
+  await page.goto('./')
+  const table = page.getByRole('table', { name: /Total detections per year/, includeHidden: true })
+  await expect(table.getByRole('rowheader', { name: '2024', includeHidden: true })).toHaveCount(1, { timeout: 30_000 })
+  await expect(table.getByRole('row', { name: /2024.*converted from VIIRS/, includeHidden: true })).toHaveCount(1)
+  await expect(table.getByRole('row', { name: /2010.*observed by Aqua MODIS/, includeHidden: true })).toHaveCount(1)
+})
+
+test('the ranking lists the states and a row selects the area', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('tab', { name: 'Ranking' }).click()
+  const table = page.getByRole('table', { name: /^States by/ })
+  await expect(table.getByRole('row')).toHaveCount(11, { timeout: 30_000 })
+  await page.getByRole('button', { name: 'Show all 27' }).click()
+  await expect(table.getByRole('row')).toHaveCount(28)
+  await page.getByRole('button', { name: 'Per 1,000 km²' }).click()
+  await table.getByRole('button', { name: 'Select Ceará as the area' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Ceará, Brazil' })).toBeVisible()
+  await page.getByRole('checkbox', { name: 'Compare Pará' }).check()
+  await page.getByRole('tab', { name: /so far$/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Compared, per 1,000 km²' })).toBeVisible()
+})
+
+test('the map shows this year against normal with a legend', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.getByLabel('Map legend')).toContainText('This year so far vs the same date in past years', { timeout: 30_000 })
+  await page.getByRole('radio', { name: 'No data layer' }).check()
+  await expect(page.getByLabel('Map legend')).toBeHidden()
 })
 
 test('the CSV download holds the monthly series', async ({ page }) => {
@@ -73,12 +107,25 @@ test('drawing a rectangle on the map loads that area', async ({ page }) => {
 test('on a phone, the area sheet picks a state and closes', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('./')
-  await page.getByRole('button', { name: 'Choose area' }).click()
-  const sheet = page.getByRole('dialog', { name: 'Area and view' })
+  await page.getByRole('button', { name: 'Area and layers' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Area and layers' })
   await expect(sheet).toBeVisible()
   await sheet.getByRole('combobox', { name: 'Area' }).click()
   await page.getByRole('option', { name: 'Ceará' }).click()
   await expect(sheet).toBeHidden()
   await expect(page.getByRole('heading', { level: 1, name: 'Ceará, Brazil' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+})
+
+test('on a phone, the data drawer opens the calendar and every tab fits the width', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Fire calendar' }).click({ timeout: 30_000 })
+  await expect(page.getByRole('table', { name: /Fire detections per month/ })).toBeVisible()
+  for (const name of ['Calendar', /^\d{4}$/, 'Season', 'Ranking']) {
+    await page.getByRole('tab', { name }).click()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+  }
+  await page.getByRole('button', { name: 'Back to the map' }).click()
+  await expect(page.getByRole('button', { name: 'Fire calendar' })).toBeVisible()
 })

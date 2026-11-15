@@ -31,6 +31,14 @@
   --c6: #fb923c;
   --c7: #fed7aa;
   --map-area: #fb923c;
+  /* diverging scale for this year vs normal: blue below, orange above; extremes are the lightest on dark */
+  --div0: #9cc5ff;
+  --div1: #5e93db;
+  --div2: #36598f;
+  --div3: #4a5368;
+  --div4: #8a4a22;
+  --div5: #d9672a;
+  --div6: #fdb27a;
 }
 :root[data-theme='light'] {
   color-scheme: light;
@@ -55,6 +63,13 @@
   --c6: #c2410c;
   --c7: #7c2d12;
   --map-area: #c2410c;
+  --div0: #1e4b8f;
+  --div1: #3f73c0;
+  --div2: #9dbbe3;
+  --div3: #e3e6ec;
+  --div4: #f6c49b;
+  --div5: #e2702a;
+  --div6: #9a3412;
 }
 
 /* shadcn/ui semantic variables, mapped onto the tokens above. */
