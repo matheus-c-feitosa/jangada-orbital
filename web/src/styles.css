@@ -372,3 +372,20 @@
   .cell { transition: background-color 240ms cubic-bezier(0.16, 1, 0.3, 1); }
   .sheet { transition: height 280ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 }
+
+/* "Print report" (T049, #16): only the report prints, on A4, in the light theme, with the calendar colours kept. The
+   ramp goes from light to dark, so it still reads in black and white, and the unusual months keep their dot. */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+@media print {
+  #root > :not(.print-report) { display: none !important; }
+  html, body { background: #ffffff !important; }
+  .print-report, .print-report * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print-report .cell { height: 11px; }
+  .print-report .cell-unusual::after { border: 1px solid #000000; }
+}

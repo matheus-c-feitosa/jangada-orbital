@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, Download, Globe, Moon, SlidersHorizontal, Sun, X } from 'lucide-react'
+import { flushSync } from 'react-dom'
+import { ChevronLeft, ChevronRight, Download, Globe, Moon, Printer, SlidersHorizontal, Sun, X } from 'lucide-react'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { loadAppData, type AppData, type AreaSeries, type Satellite } from './data/load'
 import { seriesForRing, type RingSeries } from './data/queries'
@@ -16,6 +17,7 @@ import { MAX_COMPARE } from './rank/RankingTable'
 import { ytdStanding } from './rank/ranking'
 import { LangContext, initialLang, makeI18n, saveLang, type Lang } from './i18n'
 import { LoadBoundary } from './LoadBoundary'
+import { PrintReport } from './PrintReport'
 
 // The map (MapLibre, the largest part of the code) is its own chunk, requested once the data is in: the answer and
 // the calendar show without waiting for the map's code. Measured with 4G and CPU 4x, fetching it next to the data
@@ -174,6 +176,29 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   useEffect(() => {
     if (recurrence) setPeriod([Math.max(recurrence.first, recurrence.last - 9), recurrence.last])
   }, [recurrence])
+
+  // "Print report" (#16): the report mounts only while the page prints (Ctrl+P or the button), in the light theme
+  const [printing, setPrinting] = useState(false)
+  useEffect(() => {
+    // beforeprint can fire twice before one afterprint (the button, then the browser): keep the first theme
+    let saved: string | null = null
+    const before = () => {
+      if (saved === null) saved = document.documentElement.dataset.theme ?? 'dark'
+      document.documentElement.dataset.theme = 'light'
+      flushSync(() => setPrinting(true))
+    }
+    const after = () => {
+      if (saved !== null) document.documentElement.dataset.theme = saved
+      saved = null
+      setPrinting(false)
+    }
+    window.addEventListener('beforeprint', before)
+    window.addEventListener('afterprint', after)
+    return () => {
+      window.removeEventListener('beforeprint', before)
+      window.removeEventListener('afterprint', after)
+    }
+  }, [])
 
   // before the effects of the map run: it reads the theme's colours from the CSS variables
   useLayoutEffect(() => {
@@ -340,7 +365,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
     recentSpan: recent ? i.t('dateRange', { a: recent.from, b: recent.to }) : recent,
     view, onView: setView, sat, onSat: setSat,
     years, fromYear, toYear: endYear, onRange: (f: number, t: number) => { setFromYear(f); setToYear(t) },
-    canDownload: !!series && !areaLoading, onDownload: download,
+    canDownload: !!series && !areaLoading, onDownload: download, onPrint: () => window.print(),
   }
 
   const drawing = drawMode !== 'none'
@@ -478,6 +503,9 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
             <button type="button" className="btn touch mt-2 !min-h-12 !rounded-xl !text-sm !font-semibold" onClick={download} disabled={!filterProps.canDownload}>
               <Download size={18} aria-hidden="true" /> {i.t('downloadCsv')}
             </button>
+            <button type="button" className="btn touch !min-h-12 !rounded-xl !text-sm" onClick={() => window.print()} disabled={!filterProps.canDownload}>
+              <Printer size={18} aria-hidden="true" /> {i.t('printReport')}
+            </button>
           </div>
           <div className="min-w-0">
             <DataPanel {...panelProps} tabStyle="segment" />
@@ -583,6 +611,11 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
       {method}
       {/* display: contents keeps the layouts' own boxes; [hidden] wins over it (Tailwind preflight, !important) */}
       {calendarSeen && <div className="contents" hidden={page === 'method'}>{body}</div>}
+      {printing && data && series && (
+        <PrintReport series={series} areaName={panelProps?.areaName ?? areaName} kindLabel={kindLabel} summary={summary}
+          standing={status ? percentileText(status, i) : null} dataDate={dataDate} view={view} sat={sat}
+          fromYear={fromYear} toYear={endYear} partialMonth={partialMonth} partialDays={partialDays} />
+      )}
     </>
   )
 }

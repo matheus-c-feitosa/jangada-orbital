@@ -3,10 +3,23 @@
 Run on 2026-11-15 against the production build (`npm run build`, served by `vite preview`), branch
 `perf/fast-first-screen`.
 
-## Accessibility
+## Lighthouse
 
-Lighthouse could not be run in this environment. It was replaced by a script with the same checks, written for this
-pass and run with the project's Playwright and the Chrome DevTools Protocol:
+Lighthouse 12.6.1, desktop preset, run on the production build of `main` at `f428444` with headless Chromium 1255:
+
+| Category | Score |
+|---|---|
+| Accessibility | **100** |
+| Best practices | 100 |
+| SEO | 91 |
+
+The SEO point lost is `robots.txt`. `vite preview` answers that path with the app page. On GitHub Pages, `robots.txt`
+belongs to the root of the user domain, outside this project. The mobile preset was not run.
+
+## Accessibility script
+
+A script with checks close to Lighthouse's was written for this pass. It runs with the project's Playwright and the
+Chrome DevTools Protocol:
 
 - interactive elements without an accessible name, from Chrome's accessibility tree;
 - duplicate ids;
@@ -24,8 +37,6 @@ pass and run with the project's Playwright and the Chrome DevTools Protocol:
 | Phone 390 px, area sheet open | no failures* | no failures* |
 
 \* The full-screen sheet covers the area header, so the page shows its `h2` title and no `h1`.
-
-**Still to do:** a Lighthouse run in a local Chrome, to put a number on the ≥ 95 criterion of #12.
 
 ## Keyboard
 
@@ -50,5 +61,5 @@ These tests pass:
 | Suite | Result |
 |---|---|
 | Vitest | 72 passed |
-| Playwright | 28 passed |
+| Playwright | 29 passed |
 | pytest | 44 passed |
