@@ -62,6 +62,13 @@ describe('yearly totals with uncertainty', () => {
     expect(f[5]).toMatchObject({ year: 2006, modis: 60, viirs: null })
     expect(f[8]).toMatchObject({ year: 2009, viirs: 240 })
   })
+
+  test('from the month S-NPP ended, the VIIRS family counts NOAA-20 (S-NPP flew only a few days)', () => {
+    const b = area('B', () => 10, 2026, '2026-11')
+    b.observed['S-NPP'] = b.months.map((m) => (m < '2026-11' ? 100 : 6))
+    b.observed['NOAA-20'] = b.months.map(() => 90)
+    expect(familyRows(b, '2026-11')[0].viirs).toBe(10 * 100 + 90)
+  })
 })
 
 describe('this year against previous years at the same date', () => {
@@ -116,5 +123,14 @@ describe('VIIRS agreement', () => {
     expect(r.map((p) => p.month)).toEqual(['2018-01', '2018-03', '2018-04'])
     expect(r[2]).toMatchObject({ noaa20: null, noaa21: 1 })
     expect(medianRatio(r, 'noaa20')).toBe(1)
+  })
+
+  test('the month S-NPP ended is left out, so its few days do not inflate the ratio', () => {
+    const a = area('BR', () => 0, 2026, '2026-11')
+    a.observed['S-NPP'] = a.months.map((m) => (m < '2026-11' ? 1000 : 600))
+    a.observed['NOAA-20'] = a.months.map(() => 1000)
+    const r = viirsRatios(a)
+    expect(r.map((p) => p.month)).not.toContain('2026-11')
+    expect(r).toHaveLength(10)
   })
 })

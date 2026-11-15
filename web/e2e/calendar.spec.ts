@@ -117,6 +117,30 @@ test('on a phone, the area sheet picks a state and closes', async ({ page }) => 
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
 })
 
+test('on a tablet, drawing closes the filters and the map shows how to draw and how to cancel', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 })
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Area and layers' }).click({ timeout: 30_000 })
+  await page.getByRole('dialog', { name: 'Area and layers' }).getByRole('button', { name: 'Rectangle' }).click()
+  await expect(page.getByRole('dialog', { name: 'Area and layers' })).toBeHidden()
+  const hint = page.getByRole('status').filter({ hasText: 'Tap two opposite corners on the map.' })
+  await expect(hint).toBeVisible()
+  await hint.getByRole('button', { name: 'Cancel' }).click()
+  await expect(hint).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Area and layers' })).toBeVisible()
+})
+
+test('on a phone, an area that fails to load says so instead of loading forever', async ({ page }) => {
+  await page.route('**/data/tiles/**', (route) => route.abort())
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Area and layers' }).first().click({ timeout: 30_000 })
+  await page.getByRole('dialog', { name: 'Area and layers' }).getByRole('button', { name: /Use lat, lon, radius/ }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'Could not load this area' })).toBeVisible()
+  await page.getByRole('button', { name: 'Fire calendar' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'Could not load this area' })).toBeVisible()
+})
+
 test('on a phone, the data drawer opens the calendar and every tab fits the width', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('./')

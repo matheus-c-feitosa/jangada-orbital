@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { AreaSeries } from '../data/load'
+import { SNPP_END, type AreaSeries } from '../data/load'
 import { G_VIIRS, medianRatio, viirsRatios } from './viirs'
 
 const two = new Intl.NumberFormat('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
@@ -21,7 +21,7 @@ interface Lane {
 const LANES: Lane[] = [
   { name: 'Terra', flying: ['2000-02-24', null], role: { from: '2000-11-01', to: '2002-08-01', kind: 'converted' } },
   { name: 'Aqua', flying: ['2002-07-04', null], role: { from: '2002-08-01', to: '2024-01-01', kind: 'observed' } },
-  { name: 'S-NPP', flying: ['2012-01-19', '2026-11-02'] },
+  { name: 'S-NPP', flying: ['2012-01-19', SNPP_END] },
   { name: 'NOAA-20', flying: ['2018-01-05', null], role: { from: '2024-01-01', to: null, kind: 'converted' } },
   { name: 'NOAA-21', flying: ['2023-01-01', null], role: { from: '2024-01-01', to: null, kind: 'converted' } },
 ]
@@ -93,6 +93,8 @@ export function ViirsAgreement({ brazil }: { brazil: AreaSeries | null }) {
   }
   const m20 = medianRatio(points, 'noaa20')
   const m21 = medianRatio(points, 'noaa21')
+  // ratios outside the axis are drawn at its edge; name them so the chart does not hide them
+  const clipped = points.filter((p) => [p.noaa20, p.noaa21].some((v) => v !== null && (v < lo || v > hi))).map((p) => p.month)
   const years = Array.from({ length: Math.floor(last) - Math.ceil(first) + 1 }, (_, i) => Math.ceil(first) + i).filter((yr) => yr % 2 === 0)
 
   return (
@@ -121,7 +123,10 @@ export function ViirsAgreement({ brazil }: { brazil: AreaSeries | null }) {
         <li className="inline-flex items-center gap-2"><svg width="24" height="8" aria-hidden="true"><line x1="1" x2="23" y1="4" y2="4" className="stroke-ink-2" strokeWidth={2} strokeDasharray="5 3" /></svg>NOAA-21 ÷ S-NPP</li>
         <li className="inline-flex items-center gap-2"><svg width="24" height="8" aria-hidden="true"><line x1="1" x2="23" y1="4" y2="4" className="stroke-ink" strokeWidth={1.5} strokeDasharray="6 4" /></svg>g = {G_VIIRS}</li>
       </ul>
-      <p className="text-sm">Months with fewer than 500 detections are left out: ratios of small counts are noise.</p>
+      <p className="text-sm">
+        Months with fewer than 500 detections are left out: ratios of small counts are noise.
+        {clipped.length ? ` ${clipped.join(', ')} fall outside ${lo}–${hi} and are drawn at the edge.` : ''}
+      </p>
     </section>
   )
 }

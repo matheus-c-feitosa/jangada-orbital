@@ -193,13 +193,28 @@ export function App() {
       layer={layer} standings={standings} dateLabel={dateLabel} onPickState={pickState} compact={phone} className="h-full" />
   )
 
+  // shown in every layout: without them a failed or empty drawn area reads as "loading" or "no fires, as usual"
+  const notices = (
+    <>
+      {areaError && <p className="text-[13px] text-unusual" role="alert">{areaError}</p>}
+      {empty && <p className="text-[13px] text-ink-3" role="status">This area has no grid cells inside Brazil. Draw inside Brazil or pick a state.</p>}
+    </>
+  )
+
   const answer = data && (
     <>
       <AnswerLine areaName={areaName} comparison={comparison} loading={areaLoading || !series}
         cells={area.kind === 'ring' ? ringSeries?.cells : undefined} lastDayPartial={data.manifest.last_day_partial} areaKm2={series?.area_km2} />
-      {areaError && <p className="text-[13px] text-unusual" role="alert">{areaError}</p>}
-      {empty && <p className="text-[13px] text-ink-3" role="status">This area has no grid cells inside Brazil. Draw inside Brazil or pick a state.</p>}
+      {notices}
     </>
+  )
+
+  // on tablets and phones the filters close while drawing, so the map carries the instructions and a way out
+  const drawHint = drawMode !== 'none' && (
+    <p role="status" className={`absolute inset-x-3 top-3 z-10 m-0 rounded-xl border border-brand bg-surface px-4 py-3 text-sm ${floating}`}>
+      {drawMode === 'rectangle' ? 'Tap two opposite corners on the map.' : 'Tap each corner; tap the first point to close.'}{' '}
+      <button type="button" className="font-semibold text-ink underline" onClick={() => setDrawMode('none')}>Cancel</button>
+    </p>
   )
 
   const dataPanel = data && (
@@ -254,7 +269,7 @@ export function App() {
       <>
         <section className="relative h-[48vh] min-h-[320px]" aria-label="Map">
           {map}
-          <div className="absolute left-3 top-3 z-10">{filtersButton}</div>
+          {drawHint || <div className="absolute left-3 top-3 z-10">{filtersButton}</div>}
         </section>
         <main className="min-w-0 p-5">
           {answer}
@@ -268,12 +283,7 @@ export function App() {
       <>
         <section className="relative h-[calc(100dvh-56px-260px)] min-h-[280px]" aria-label="Map">
           {map}
-          {drawMode !== 'none' && (
-            <p role="status" className={`absolute inset-x-3 top-3 z-10 m-0 rounded-xl border border-brand bg-surface px-4 py-3 text-sm ${floating}`}>
-              {drawMode === 'rectangle' ? 'Tap two opposite corners on the map.' : 'Tap each corner; tap the first point to close.'}{' '}
-              <button type="button" className="font-semibold text-ink underline" onClick={() => setDrawMode('none')}>Cancel</button>
-            </p>
-          )}
+          {drawHint}
         </section>
         <main
           className={drawerOpen
@@ -291,11 +301,12 @@ export function App() {
                 <button type="button" className="inline-flex size-11 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2"
                   onClick={() => setDrawerOpen(false)} aria-label="Back to the map"><ChevronDown size={20} aria-hidden="true" /></button>
               </div>
-              <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6">{dataPanel}</div>
+              <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6">{notices}{dataPanel}</div>
             </>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
               <div className="min-h-0 flex-1 overflow-hidden">
+                {notices}
                 <AnswerLine areaName={areaName} comparison={comparison} loading={areaLoading || !series} lastDayPartial={data.manifest.last_day_partial} brief />
               </div>
               <div className="grid shrink-0 grid-cols-2 gap-2">

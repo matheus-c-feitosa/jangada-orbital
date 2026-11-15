@@ -54,11 +54,17 @@ export function AnnualChart({ series, areaName, view, partialMonth, dataDate, fr
     return `${y}: ${compact.format(r.value)}${range}, ${sourceText(r.source)}${r.partial ? `, through ${dataDate}` : ''}`
   }
 
-  const peak = rows.filter((r) => !r.partial).reduce((a, b) => (b.value > a.value ? b : a), rows[0])
+  // a range can hold only the current, partial year: then there is no peak and no median to state
+  const complete = rows.filter((r) => !r.partial)
+  const peak = complete.length ? complete.reduce((a, b) => (b.value > a.value ? b : a)) : null
   const current = rows[rows.length - 1]
   const sentence = observed
     ? 'As delivered, VIIRS counts several times more hotspots than MODIS, so the two families cannot be added or compared directly.'
-    : `${areaName} peaked in ${peak.year} with ${fmt.format(peak.value)} detections. ${current.partial ? `${current.year} has ${fmt.format(current.value)} so far; ` : ''}the median complete year has ${fmt.format(med)}.`
+    : [
+        peak && `${areaName} peaked in ${peak.year} with ${fmt.format(peak.value)} detections.`,
+        current.partial && `${current.year} has ${fmt.format(current.value)} so far.`,
+        Number.isFinite(med) && `The median complete year has ${fmt.format(med)}.`,
+      ].filter(Boolean).join(' ')
 
   return (
     <section className="mt-6 flex flex-col gap-3 border-t border-line pt-5" aria-labelledby="annual-title">

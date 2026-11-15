@@ -31,7 +31,9 @@ export function CompareChart({ data, series, areaName, compare, onRemove }: Prop
   const { manifest } = data
   const lastMonth = manifest.last_month.slice(0, 7)
   const lines = useMemo(() => {
-    const list = [{ code: '', name: areaName, s: series }, ...compare.filter((c) => data.areas[c]).map((c) => ({ code: c, name: data.areas[c].name, s: data.areas[c] }))]
+    // a compared state that is also the selected area is drawn once, as the selected area
+    const others = compare.filter((c) => data.areas[c] && data.areas[c] !== series)
+    const list = [{ code: '', name: areaName, s: series }, ...others.map((c) => ({ code: c, name: data.areas[c].name, s: data.areas[c] }))]
     return list
       .filter((l) => l.s.area_km2)
       .map((l) => ({ ...l, points: cumulativeDensity(l.s.months, l.s.value, l.s.area_km2 as number, lastMonth, manifest.last_month_days) }))

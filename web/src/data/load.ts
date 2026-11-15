@@ -2,6 +2,8 @@
 
 export const SATELLITES = ['Terra', 'Aqua', 'S-NPP', 'NOAA-20', 'NOAA-21'] as const
 export type Satellite = (typeof SATELLITES)[number]
+/** Last day of S-NPP data (docs/METHOD.md). From its month on S-NPP did not fly the whole month. */
+export const SNPP_END = '2026-11-02'
 
 export interface Manifest {
   schema: number

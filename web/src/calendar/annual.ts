@@ -1,7 +1,7 @@
 // Yearly totals with the conversion uncertainty (spec 002, story 1, FR-020/FR-021).
 // One row per calendar year from the harmonized monthly series; converted years (Terra before August 2002, VIIRS from
 // 2024) carry the lo–hi range (P25–P75 of the conversion), observed Aqua years do not.
-import type { AreaSeries } from '../data/load'
+import { SNPP_END, type AreaSeries } from '../data/load'
 import { median } from './stats'
 
 export type YearSource = 'aqua' | 'terra' | 'viirs' | 'terra+aqua'
@@ -80,7 +80,9 @@ export function familyRows(series: Pick<AreaSeries, 'months' | 'observed'>, part
     if (year < fromYear) return
     const row = byYear.get(year) ?? { year, modis: null, viirs: null, partial: false, months: 0 }
     const modis = o.Aqua[i] ?? o.Terra[i]
-    const viirs = o['S-NPP'][i] ?? o['NOAA-20'][i] ?? o['NOAA-21'][i]
+    // in its last month S-NPP flew only a few days; NOAA-20 takes over from that month
+    const snpp = m.slice(0, 7) >= SNPP_END.slice(0, 7) ? null : o['S-NPP'][i]
+    const viirs = snpp ?? o['NOAA-20'][i] ?? o['NOAA-21'][i]
     if (modis !== null) row.modis = (row.modis ?? 0) + modis
     if (viirs !== null) row.viirs = (row.viirs ?? 0) + viirs
     row.months += 1

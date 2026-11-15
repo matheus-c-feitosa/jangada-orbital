@@ -73,7 +73,8 @@ Possible improvements:
   every previous complete year (the comparison of “this year so far”). The map colour is that percentile on a
   blue–orange scale centred on the median; the ranking sorts by total, density or percentile.
 - **VIIRS agreement (Method page):** monthly NOAA-20 ÷ S-NPP and NOAA-21 ÷ S-NPP for Brazil, months with at least 500
-  detections, next to `g = 0.981`.
+  detections and before the month S-NPP ended (it flew only two days of November 2026), next to `g = 0.981`. In the
+  Observed view of the yearly totals, NOAA-20 stands for the VIIRS family from that month on.
 - **Density:** detections per 1,000 km². Areas are geodesic: on the WGS84 ellipsoid for Brazil and states (IBGE
   outlines, within 0.2% of IBGE's official areas), and on a sphere for drawn shapes, circles and municipalities.
 
