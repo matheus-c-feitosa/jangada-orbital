@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { classBreaks, classOf, compareMonth, daysIn } from './stats'
+import { oniLabel, type OniPhase } from '../data/extras'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const SOURCE_LABEL = ['Aqua MODIS, observed', 'Terra MODIS, scaled to Aqua (estimate)', 'VIIRS, calibrated to Aqua (estimate)']
@@ -19,7 +20,7 @@ interface Props {
   partialDays: number
   caption: string
   /** El Niño / La Niña phase per year (NOAA ONI), shown when climate context is on */
-  oni?: Record<string, { phase: 'EN' | 'LN' | null }> | null
+  oni?: Record<string, { phase: OniPhase | null }> | null
 }
 
 interface Cell {
@@ -109,7 +110,8 @@ export function CalendarTable({ months, values, source, fromYear, toYear, partia
           <caption className="pb-1.5 text-left text-[13px] text-ink-2">{caption}</caption>
           <thead>
             <tr>
-              <td className="w-14 max-sm:w-10" />
+              {/* the El Niño / La Niña marks need room: beside the year on wide screens, under it on phones */}
+              <td className={oni ? 'w-[5.5rem] max-sm:w-[3.25rem]' : 'w-14 max-sm:w-10'} />
               {MONTHS.map((m) => (
                 <th key={m} scope="col" abbr={m} className="h-[22px] px-0 text-center font-medium text-ink-3">{m[0]}<span className="sr-only">{m.slice(1)}</span></th>
               ))}
@@ -119,13 +121,17 @@ export function CalendarTable({ months, values, source, fromYear, toYear, partia
             {grid.map((row) => {
               const year = row[0].month.slice(0, 4)
               const estimated = row.some((c) => c.source !== null && c.source > 0)
+              const enso = oni?.[year]?.phase ?? null
               return (
                 <tr key={year}>
                   <th scope="row" className="whitespace-nowrap px-1.5 text-right font-medium text-ink-3">{year}{estimated && <small className="ml-1 font-normal max-sm:ml-0 max-sm:block max-sm:leading-none">est.</small>}
-                    {oni?.[year]?.phase && (
-                      <span className={`ml-1 inline-block rounded px-1 text-[10px] font-semibold leading-[14px] ${oni[year].phase === 'EN' ? 'bg-[var(--div6)] text-[#1a0d03]' : 'bg-[var(--div0)] text-[#0b1220]'}`}
-                        title={oni[year].phase === 'EN' ? 'El Niño year' : 'La Niña year'}>
-                        {oni[year].phase}<span className="sr-only">{oni[year].phase === 'EN' ? ', El Niño year' : ', La Niña year'}</span>
+                    {enso && (
+                      // one mark per phase, in the order they happened: "LN EN" is La Niña, then El Niño
+                      <span className="ml-1 inline-flex gap-0.5 max-sm:ml-0 max-sm:flex max-sm:justify-end" title={oniLabel(enso)}>
+                        {enso.split('-').map((ph) => (
+                          <span key={ph} className={`inline-block rounded px-1 text-[10px] font-semibold leading-[14px] max-sm:px-0.5 ${ph === 'EN' ? 'bg-[var(--div6)] text-[#1a0d03]' : 'bg-[var(--div0)] text-[#0b1220]'}`}>{ph}</span>
+                        ))}
+                        <span className="sr-only">, {oniLabel(enso)}</span>
                       </span>
                     )}</th>
                   {row.map((c) => (
@@ -159,7 +165,7 @@ export function CalendarTable({ months, values, source, fromYear, toYear, partia
         {source && <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-unusual" /> Unusual: above the 90th percentile of past years</span>}
         <span className="inline-flex items-center gap-1.5"><span className="cell-partial inline-block h-3 w-[22px] rounded-sm bg-c3" /> Partial month</span>
         {source && <span className="inline-flex items-center gap-1.5">est. = year includes estimates (Terra 2000–02, VIIRS from 2024)</span>}
-        {oni && <span className="inline-flex items-center gap-1.5">EN El Niño, LN La Niña year (NOAA Oceanic Niño Index)</span>}
+        {oni && <span className="inline-flex items-center gap-1.5">EN El Niño, LN La Niña year; two marks: one phase, then the other (NOAA Oceanic Niño Index)</span>}
       </div>
     </div>
   )

@@ -114,8 +114,14 @@ export async function muniRing(id: string, uf: string): Promise<[number, number]
   return best ? (best.map((c) => [c[0], c[1]]) as [number, number][]) : null
 }
 
+/** NOAA ONI phase of a year: one phase, or both in the order they happened ("LN-EN": La Niña, then El Niño) */
+export type OniPhase = 'EN' | 'LN' | 'EN-LN' | 'LN-EN'
+const ENSO_NAME = { EN: 'El Niño', LN: 'La Niña' } as const
+/** "El Niño year", or "La Niña, then El Niño year" for a year with both phases */
+export const oniLabel = (phase: OniPhase) => `${phase.split('-').map((p) => ENSO_NAME[p as 'EN' | 'LN']).join(', then ')} year`
+
 export interface Oni {
-  years: Record<string, { phase: 'EN' | 'LN' | null; peak: number }>
+  years: Record<string, { phase: OniPhase | null; peak: number }>
 }
 export const loadOni = () => optional<Oni>('oni.json')
 

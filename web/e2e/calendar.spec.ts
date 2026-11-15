@@ -193,6 +193,13 @@ test('climate context marks El Niño and La Niña years, and the Season tab show
   await page.goto('./')
   await page.getByRole('checkbox', { name: /Climate context/ }).check({ timeout: 30_000 })
   await expect(page.getByRole('rowheader', { name: /^2015.*El Niño year/ })).toBeVisible()
+  // a year with both phases shows both, in order: El Niño early in 2010, La Niña from mid-year
+  await expect(page.getByRole('rowheader', { name: /^2010.*El Niño, then La Niña year/ })).toBeVisible()
+  // the marks fit in the year column instead of sliding under January
+  const overflowing = await page.getByRole('table', { name: /Fire detections per month/ }).evaluate((t) =>
+    [...t.querySelectorAll('tbody th[scope="row"]')].filter((th) => [...th.querySelectorAll('span[title] > span:not(.sr-only)')]
+      .some((mark) => mark.getBoundingClientRect().right > th.getBoundingClientRect().right + 0.5)).length)
+  expect(overflowing).toBe(0)
   await page.getByRole('tab', { name: 'Season' }).click()
   await expect(page.getByRole('heading', { level: 2, name: 'Fire intensity and night fires' })).toBeVisible()
 })

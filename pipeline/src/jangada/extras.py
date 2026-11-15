@@ -57,6 +57,7 @@ MIN_HISTORY = 5           # previous complete years needed for a percentile
 FIRST_YEAR = 2001         # first complete year of the series (it starts in November 2000)
 SIMPLIFY_BIOMES = 0.01    # degrees (~1 km): the biome outline is a map overlay, the cells carry the statistics
 SMALL_SAMPLE = 20         # detections; below this an FRP median is flagged as a small sample
+USUAL_YEARS = (2003, 2023)  # complete Aqua years: "more than usual" compares with the same month of these years
 
 
 def log(message: str) -> None:
@@ -331,6 +332,16 @@ def oni(con) -> None:
         parts = line.split()
         if len(parts) == 4 and parts[0] in centre:
             seasons.append((int(parts[1]), centre[parts[0]], float(parts[3])))
+    write_json("oni.json", {"source": "NOAA CPC Oceanic Nino Index (ERSSTv5), oni.ascii.txt", "rule":
+                            "El Nino / La Nina: at least 5 consecutive overlapping 3-month seasons at or beyond +/-0.5 C; "
+                            "a year takes each phase that covers at least 3 of its seasons, in the order they happened "
+                            "(EN, LN, EN-LN or LN-EN)", "years": oni_phases(seasons)})
+
+
+def oni_phases(seasons: list[tuple[int, int, float]]) -> dict[str, dict]:
+    """{year: {phase, peak, seasons}} from (year, centre month, anomaly) in time order, from 2000. A year in which both
+    phases cover at least 3 seasons is a transition ("LN-EN" for La Nina, then El Nino), not the larger one alone:
+    2010 had El Nino in its first months, linked to that year's Amazon drought, and La Nina from mid-year."""
     # NOAA rule: El Nino (La Nina) when ONI >= +0.5 (<= -0.5) for at least 5 consecutive overlapping seasons
     phase = [None] * len(seasons)
     for sign, label in ((1, "EN"), (-1, "LN")):
@@ -347,22 +358,34 @@ def oni(con) -> None:
     for (y, m, a), p in zip(seasons, phase):
         if y < 2000:
             continue
-        d = years.setdefault(y, {"EN": 0, "LN": 0, "peak": 0.0, "months": []})
+        d = years.setdefault(y, {"EN": 0, "LN": 0, "order": [], "peak": 0.0, "months": []})
         d["months"].append(round(a, 2))
         if p:
             d[p] += 1
+            if p not in d["order"]:
+                d["order"].append(p)
         if abs(a) > abs(d["peak"]):
             d["peak"] = round(a, 2)
-    out = {}
-    for y, d in sorted(years.items()):
-        ph = "EN" if d["EN"] >= 3 and d["EN"] >= d["LN"] else "LN" if d["LN"] >= 3 else None
-        out[str(y)] = {"phase": ph, "peak": d["peak"], "seasons": d["months"]}
-    write_json("oni.json", {"source": "NOAA CPC Oceanic Nino Index (ERSSTv5), oni.ascii.txt", "rule":
-                            "El Nino / La Nina: at least 5 consecutive overlapping 3-month seasons at or beyond +/-0.5 C; "
-                            "a year takes the phase that covers at least 3 of its seasons", "years": out})
+    return {str(y): {"phase": "-".join(p for p in d["order"] if d[p] >= 3) or None, "peak": d["peak"],
+                     "seasons": d["months"]}
+            for y, d in sorted(years.items())}
 
 
 # ---------------------------------------------------------------- recent (last 7 days)
+
+def usual_p90_sql(source: str, month_of_year: int) -> str:
+    """SQL for (cell_lat, cell_lon, p90): the 90th percentile of the cell's harmonized value in this month of the year
+    over USUAL_YEARS. A year with no row for the cell had no fire there that month and counts as zero, as in the
+    calendar; leaving it out raises the percentile of places that seldom burn, and "more than usual" flags too few."""
+    y0, y1 = USUAL_YEARS
+    return f"""
+        WITH m AS (SELECT cell_lat, cell_lon, year(month) AS y, sum(value) AS v FROM {source}
+                   WHERE month(month) = {month_of_year} AND year(month) BETWEEN {y0} AND {y1} GROUP BY ALL)
+        SELECT c.cell_lat, c.cell_lon, quantile_cont(coalesce(m.v, 0), 0.9) AS p90
+        FROM (SELECT DISTINCT cell_lat, cell_lon FROM m) c CROSS JOIN range({y0}, {y1 + 1}) AS yr(y)
+        LEFT JOIN m ON m.cell_lat = c.cell_lat AND m.cell_lon = c.cell_lon AND m.y = yr.y
+        GROUP BY ALL"""
+
 
 def recent(con) -> None:
     spatial(con)
@@ -414,9 +437,7 @@ def recent(con) -> None:
             FROM rb WHERE instrument = 'VIIRS' AND satellite IN ('NOAA-20', 'NOAA-21') GROUP BY ALL),
         eq AS (
             SELECT cell_lat, cell_lon, sum(k) / 2.0 * any_value(f) AS aqua_eq FROM viirs_k v JOIN ratio USING (uf) GROUP BY ALL),
-        hist AS (
-            SELECT cell_lat, cell_lon, quantile_cont(value, 0.9) AS p90 FROM '{HARMONIZED}'
-            WHERE month(month) = {moy} AND year(month) BETWEEN 2003 AND 2023 GROUP BY ALL),
+        hist AS ({usual_p90_sql(f"'{HARMONIZED}'", moy)}),
         agg AS (
             SELECT cell_lat, cell_lon, count(*) AS n, max(frp) AS frp_max, max(acq_date) AS last_date, min(acq_date) AS first_date,
                    list(DISTINCT satellite ORDER BY satellite) AS sats
