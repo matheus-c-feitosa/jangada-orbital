@@ -93,12 +93,13 @@ Possible improvements:
 - **Validation scatter:** the held-out fit of `jangada-harmonize` recomputed from the published observed counts; it
   reproduces the published metrics.
 - **El Niño / La Niña:** NOAA CPC Oceanic Niño Index. A phase needs five consecutive overlapping seasons at or beyond
-  ±0.5 °C; a year takes the phase that covers at least three of its seasons.
+  ±0.5 °C; a year takes each phase that covers at least three of its seasons, in the order they happened (2010: El
+  Niño, then La Niña).
 - **Last 7 days:** FIRMS near-real-time South America files (no key), clipped to the states of Brazil, without
   low-confidence detections or known static sources. The Aqua-MODIS equivalent uses the mean of NOAA-20 and NOAA-21
   ~1 km positions times each state's ratio of harmonized value to that mean over the last 12 months. "More than usual"
-  means above the cell's 90th percentile for this month (2003–2023), scaled to 7 days, and at least 2. The layer is
-  frozen at the time of the export.
+  means above the cell's 90th percentile for this month (2003–2023; a year without fire in the cell that month counts
+  as zero, as in the calendar), scaled to 7 days, and at least 2. The layer is frozen at the time of the export.
 - **Fire intensity:** median fire radiative power per detection and night share per year, Aqua MODIS and S-NPP VIIRS
   apart (never harmonized, never mixed); years with fewer than 20 detections are drawn hollow.
 - **Overpass time:** median local solar time (UTC + longitude / 15) of daytime detections per satellite and year.

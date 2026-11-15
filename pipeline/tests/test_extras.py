@@ -2,10 +2,40 @@
 
 import json
 
+import duckdb
 import pytest
 
 from jangada.export_web import WEB_DATA
-from jangada.extras import _b36, encode_rows, ytd_standing
+from jangada.extras import _b36, encode_rows, oni_phases, usual_p90_sql, ytd_standing
+
+
+def test_usual_p90_counts_years_without_fire_as_zero():
+    # a cell that burned in August of 2 of the 21 usual years: its usual August is no fire, not the 2 fire years
+    con = duckdb.connect()
+    con.execute("""CREATE TABLE h AS SELECT * FROM (VALUES (1, 2, DATE '2010-08-01', 30.0), (1, 2, DATE '2020-08-01', 50.0),
+                                                           (1, 3, DATE '2010-08-01', 30.0))
+                   t(cell_lat, cell_lon, month, value)""")
+    for y in range(2003, 2024):  # and a cell that burns every August
+        con.execute(f"INSERT INTO h VALUES (5, 5, DATE '{y}-08-01', {10.0 + y - 2003})")
+    p90 = {(la, lo): v for la, lo, v in con.execute(usual_p90_sql("h", 8)).fetchall()}
+    assert p90[(1, 2)] == pytest.approx(0.0)  # was 48 with the fire years alone
+    assert p90[(1, 3)] == pytest.approx(0.0)
+    assert p90[(5, 5)] == pytest.approx(28.0)  # 10..30, 90th percentile
+
+
+def _seasons(start_year, anomalies):
+    return [(start_year + i // 12, i % 12 + 1, a) for i, a in enumerate(anomalies)]
+
+
+def test_oni_years_with_both_phases_are_transitions():
+    # 2009: La Nina until March (a run that began in 2008), El Nino from June; 2010: El Nino until April, La Nina from
+    # June; 2011: La Nina all year
+    ln, en, zero = -0.8, 1.0, 0.0
+    years = oni_phases(_seasons(2008, [ln] * 12 + [ln] * 3 + [zero] * 2 + [en] * 7 + [en] * 4 + [zero] + [ln] * 7 + [ln] * 12))
+    assert {y: d["phase"] for y, d in years.items()} == {"2008": "LN", "2009": "LN-EN", "2010": "EN-LN", "2011": "LN"}
+    # a phase that covers only 1 or 2 of a year's seasons does not name the year
+    years = oni_phases(_seasons(2014, [zero] * 10 + [en] * 2 + [en] * 3 + [zero] * 9))
+    assert {y: d["phase"] for y, d in years.items()} == {"2014": None, "2015": "EN"}
 
 
 def test_base36_and_row_encoding_round_trip():

@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'vitest'
-import { decodeRecent, decodeRows, mercatorRow, recurrenceClass, yearsWithFire } from '../src/data/extras'
+import { decodeRecent, decodeRows, mercatorRow, oniLabel, recurrenceClass, yearsWithFire } from '../src/data/extras'
+
+describe('climate context (FR-031)', () => {
+  test('a year with both phases names them in the order they happened', () => {
+    expect(oniLabel('EN')).toBe('El Niño year')
+    expect(oniLabel('LN')).toBe('La Niña year')
+    expect(oniLabel('EN-LN')).toBe('El Niño, then La Niña year')
+    expect(oniLabel('LN-EN')).toBe('La Niña, then El Niño year')
+  })
+})
 
 describe('recurrence (FR-022)', () => {
   test('rows decode to cells with absolute longitudes', () => {
