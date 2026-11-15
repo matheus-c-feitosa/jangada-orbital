@@ -31,16 +31,16 @@ interface Props {
   onDrawMode: (mode: DrawMode) => void
   layer: MapLayer
   onLayer: (layer: MapLayer) => void
-  /** IBGE biomes, once biomes.geojson has loaded */
+  /** IBGE biomes, once biome_series.json has loaded */
   biomes: BiomeInfo[]
   biomeBorders: boolean
   onBiomeBorders: (on: boolean) => void
   /** recurrence: years available and the chosen period */
-  recurrenceYears: [number, number] | null
+  recurrenceYears: [number, number] | null | undefined
   period: [number, number]
   onPeriod: (period: [number, number]) => void
   /** whether the last-7-days file is published, and its dates */
-  recentSpan: string | null
+  recentSpan: string | null | undefined
   view: View
   onView: (view: View) => void
   sat: Satellite
@@ -76,8 +76,9 @@ export function AreaPanel(p: Props) {
   }
   const layers: [MapLayer, string, string | null][] = [
     ['normal', 'This year vs normal, by state', null],
-    ['recurrence', 'Fire recurrence', p.recurrenceYears ? null : 'not published yet'],
-    ['recent', 'Detections, last 7 days', p.recentSpan ?? 'not published yet'],
+    // undefined: not loaded yet (the file loads when its layer is picked); null: not published
+    ['recurrence', 'Fire recurrence', p.recurrenceYears === null ? 'not published yet' : null],
+    ['recent', 'Detections, last 7 days', p.recentSpan === null ? 'not published yet' : p.recentSpan ?? null],
     ['none', 'No data layer', null],
   ]
   const yearsFor = p.recurrenceYears ? Array.from({ length: p.recurrenceYears[1] - p.recurrenceYears[0] + 1 }, (_, i) => p.recurrenceYears![0] + i) : []

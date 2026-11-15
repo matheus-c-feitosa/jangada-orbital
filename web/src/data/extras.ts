@@ -1,16 +1,24 @@
 // Extra data files of spec 002, written by `uv run jangada-extras` (pipeline/src/jangada/extras.py).
-// Each loads on first use and is cached; a missing file (an older export) resolves to null, so the views that need it
-// simply do not show.
+// Each loads the first time a view needs it and is cached; a missing file (an older export) resolves to null, so the
+// views that need it simply do not show.
 import { dataUrl, type AreaSeries, type Satellite } from './load'
 
 const cache = new Map<string, Promise<unknown>>()
 
+/** A 404 (file not published) is remembered; a network or server error is not, so the next call tries again. */
 function optional<T>(file: string): Promise<T | null> {
   let p = cache.get(file) as Promise<T | null> | undefined
   if (!p) {
     p = fetch(dataUrl(file))
-      .then((r) => (r.ok ? (r.json() as Promise<T>) : null))
-      .catch(() => null)
+      .then((r) => {
+        if (r.ok) return r.json() as Promise<T>
+        if (r.status !== 404) cache.delete(file)
+        return null
+      })
+      .catch(() => {
+        cache.delete(file)
+        return null
+      })
     cache.set(file, p)
   }
   return p
@@ -19,26 +27,32 @@ function optional<T>(file: string): Promise<T | null> {
 export interface BiomeInfo {
   id: string
   name: string
-  bbox: [number, number, number, number]
-  area_km2: number
+  area_km2?: number
 }
 
 export interface BiomeData {
-  outlines: GeoJSON.FeatureCollection
   list: BiomeInfo[]
   areas: Record<string, AreaSeries>
 }
 
+/** Biome names and monthly series (biome_series.json, small). The outlines are a separate, larger file. */
 export async function loadBiomes(): Promise<BiomeData | null> {
-  const [outlines, doc] = await Promise.all([
-    optional<GeoJSON.FeatureCollection>('biomes.geojson'),
-    optional<{ months: string[]; source: number[]; areas: Record<string, Omit<AreaSeries, 'months' | 'source'>> }>('biome_series.json'),
-  ])
-  if (!outlines || !doc) return null
+  const doc = await optional<{ months: string[]; source: number[]; areas: Record<string, Omit<AreaSeries, 'months' | 'source'>> }>('biome_series.json')
+  if (!doc) return null
   const areas: Record<string, AreaSeries> = {}
   for (const [id, a] of Object.entries(doc.areas)) areas[id] = { ...a, months: doc.months, source: doc.source }
-  const list = outlines.features.map((f) => f.properties as BiomeInfo).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-  return { outlines, list, areas }
+  const list = Object.entries(areas).map(([id, a]) => ({ id, name: a.name, area_km2: a.area_km2 }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+  return { list, areas }
+}
+
+/** Biome outlines (biomes.geojson); each feature carries {id, name, bbox, area_km2}. Only for the map. */
+export const loadBiomeOutlines = () => optional<GeoJSON.FeatureCollection>('biomes.geojson')
+
+/** [west, south, east, north] of one biome, from its outline's properties. */
+export function biomeBbox(outlines: GeoJSON.FeatureCollection | null | undefined, id: string): [number, number, number, number] | null {
+  const f = outlines?.features.find((x) => (x.properties as { id?: string } | null)?.id === id)
+  return (f?.properties as { bbox?: [number, number, number, number] } | undefined)?.bbox ?? null
 }
 
 export interface Recurrence {

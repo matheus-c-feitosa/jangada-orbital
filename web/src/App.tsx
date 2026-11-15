@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarDays, ChevronDown, ExternalLink, Moon, SlidersHorizontal, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { loadAppData, type AppData, type AreaSeries, type Satellite } from './data/load'
 import { seriesForRing } from './data/queries'
-import { loadBiomes, loadIntensity, loadMuniRanking, loadOni, loadRecent, loadRecurrence, muniRing,
-  type BiomeData, type Intensity, type MuniRanking, type Oni, type Recent, type Recurrence } from './data/extras'
+import { biomeBbox, loadBiomeOutlines, loadBiomes, loadIntensity, loadMuniRanking, loadOni, loadRecent, loadRecurrence, muniRing } from './data/extras'
 import { buildCsv, csvFileName, downloadText } from './data/csv'
 import { ringBounds, type Ring } from './geo/aoi'
 import { compareMonth } from './calendar/stats'
@@ -15,7 +14,8 @@ import { AreaPanel, type Area, type View } from './AreaPanel'
 import { DataPanel, type Tab } from './DataPanel'
 import { MAX_COMPARE } from './rank/RankingTable'
 import { ytdStanding } from './rank/ranking'
-import { Method } from './Method'
+// The Method page is text and charts nobody needs on the first screen: its own chunk.
+const Method = lazy(() => import('./Method').then((m) => ({ default: m.Method })))
 
 const REPO = 'https://github.com/matheus-c-feitosa/jangada-orbital'
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -37,6 +37,19 @@ function useMediaQuery(query: string): boolean {
     return () => mq.removeEventListener('change', onChange)
   }, [query])
   return matches
+}
+
+/** An optional extra file (data/extras.ts), loaded the first time `when` is true. undefined until then; null when the
+ * file is not published (or failed: it is tried again the next time `when` turns true). */
+function useExtra<T>(load: () => Promise<T | null>, when: boolean): T | null | undefined {
+  const [value, setValue] = useState<T | null | undefined>(undefined)
+  useEffect(() => {
+    if (!when || value) return
+    let live = true
+    load().then((v) => { if (live) setValue(v) })
+    return () => { live = false }
+  }, [when, value, load])
+  return value
 }
 
 function usePage(): ['calendar' | 'method', (p: 'calendar' | 'method') => void] {
@@ -76,14 +89,8 @@ export function App() {
   const [fromYear, setFromYear] = useState(2001)
   const [toYear, setToYear] = useState<number | null>(null)
   const [drawMode, setDrawMode] = useState<DrawMode>('none')
-  const [biomes, setBiomes] = useState<BiomeData | null>(null)
   const [biomeBorders, setBiomeBorders] = useState(false)
-  const [recurrence, setRecurrence] = useState<Recurrence | null>(null)
   const [period, setPeriod] = useState<[number, number]>([2016, 2025])
-  const [recent, setRecent] = useState<Recent | null>(null)
-  const [munis, setMunis] = useState<MuniRanking | null>(null)
-  const [oni, setOni] = useState<Oni | null>(null)
-  const [intensity, setIntensity] = useState<Intensity | null>(null)
 
   const load = useCallback(() => {
     setLoadError(null)
@@ -91,16 +98,18 @@ export function App() {
   }, [])
   useEffect(load, [load])
 
-  // spec 002 extras: optional files, loaded once the main data is in (a missing file just hides its view)
+  // spec 002 extras: optional files, each loaded when the view that shows it opens (a missing file just hides its
+  // view). Biome names and series and the ONI table are small and feed the first screen; the rest waits.
+  const biomes = useExtra(loadBiomes, !!data)
+  const oni = useExtra(loadOni, !!data)
+  const biomeOutlines = useExtra(loadBiomeOutlines, !!data && (biomeBorders || area.kind === 'biome'))
+  const recurrence = useExtra(loadRecurrence, !!data && layer === 'recurrence')
+  const recent = useExtra(loadRecent, !!data && layer === 'recent')
+  const munis = useExtra(loadMuniRanking, !!data && tab === 'ranking')
+  const intensity = useExtra(loadIntensity, !!data && tab === 'season')
   useEffect(() => {
-    if (!data) return
-    loadBiomes().then(setBiomes)
-    loadRecurrence().then((r) => { setRecurrence(r); if (r) setPeriod([Math.max(r.first, r.last - 9), r.last]) })
-    loadRecent().then(setRecent)
-    loadMuniRanking().then(setMunis)
-    loadOni().then(setOni)
-    loadIntensity().then(setIntensity)
-  }, [data])
+    if (recurrence) setPeriod([Math.max(recurrence.first, recurrence.last - 9), recurrence.last])
+  }, [recurrence])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -160,9 +169,9 @@ export function App() {
     if (!data) return null
     if (area.kind === 'state') return data.stateList.find((s) => s.uf === area.uf)?.bbox ?? null
     if (area.kind === 'ring') return ringBounds(area.ring)
-    if (area.kind === 'biome') return biomes?.list.find((b) => b.id === area.id)?.bbox ?? null
+    if (area.kind === 'biome') return biomeBbox(biomeOutlines, area.id)
     return null
-  }, [data, area, biomes])
+  }, [data, area, biomeOutlines])
 
   /** series for a ranking or comparison key: a state code, or "bio:<id>" for a biome */
   const seriesFor = useCallback((key: string): AreaSeries | null => {
@@ -228,8 +237,8 @@ export function App() {
   const filters = data && (
     <AreaPanel data={data} area={area} onArea={chooseArea} drawMode={drawMode} onDrawMode={startDraw} layer={layer} onLayer={setLayer}
       biomes={biomes?.list ?? []} biomeBorders={biomeBorders} onBiomeBorders={setBiomeBorders}
-      recurrenceYears={recurrence ? [recurrence.first, recurrence.last] : null} period={period} onPeriod={setPeriod}
-      recentSpan={recent ? `${recent.from} to ${recent.to}` : null}
+      recurrenceYears={recurrence ? [recurrence.first, recurrence.last] : recurrence} period={period} onPeriod={setPeriod}
+      recentSpan={recent ? `${recent.from} to ${recent.to}` : recent}
       view={view} onView={setView} sat={sat} onSat={setSat}
       years={years} fromYear={fromYear} toYear={endYear} onRange={(f, t) => { setFromYear(f); setToYear(t) }}
       canDownload={!!series && !areaLoading} onDownload={download} />
@@ -239,8 +248,8 @@ export function App() {
     <MapView key={theme} theme={theme} states={data.states} stateCode={area.kind === 'state' ? area.uf : null}
       ring={area.kind === 'ring' ? area.ring : null} bounds={areaBounds} drawMode={drawMode} onDrawn={onDrawn}
       layer={layer} standings={standings} dateLabel={dateLabel} onPickState={pickState} compact={phone} className="h-full"
-      biomes={biomes?.outlines ?? null} biomeId={area.kind === 'biome' ? area.id : null} biomeBorders={biomeBorders || area.kind === 'biome'}
-      recurrence={recurrence} period={period} recent={recent} />
+      biomes={biomeOutlines ?? null} biomeId={area.kind === 'biome' ? area.id : null} biomeBorders={biomeBorders || area.kind === 'biome'}
+      recurrence={recurrence ?? null} period={period} recent={recent ?? null} />
   )
 
   // shown in every layout: without them a failed or empty drawn area reads as "loading" or "no fires, as usual"
@@ -271,9 +280,9 @@ export function App() {
     <DataPanel data={data} series={series} loading={areaLoading} areaName={series?.name ?? areaName} selectedUf={area.kind === 'state' ? area.uf : null}
       view={view} sat={sat} fromYear={fromYear} toYear={endYear} partialMonth={partialMonth} partialDays={partialDays}
       tab={tab} onTab={setTab} compare={compare} onToggleCompare={toggleCompare} onSelectState={pickState} narrow={phone}
-      biomes={biomes} munis={munis} onSelectBiome={pickBiome} onSelectMuni={pickMuni} seriesFor={seriesFor}
+      biomes={biomes ?? null} munis={munis ?? null} onSelectBiome={pickBiome} onSelectMuni={pickMuni} seriesFor={seriesFor}
       selectedKey={area.kind === 'state' ? area.uf : area.kind === 'biome' ? `bio:${area.id}` : null}
-      oni={oni} intensity={intensity} areaKey={areaKey} />
+      oni={oni ?? null} intensity={intensity ?? null} areaKey={areaKey} />
   )
 
   const filtersSheet = (
@@ -296,7 +305,11 @@ export function App() {
 
   let body
   if (page === 'method') {
-    body = <Method manifest={data?.manifest ?? null} repo={REPO} brazil={data?.areas.BR ?? null} />
+    body = (
+      <Suspense fallback={<main className="p-6"><p className="py-12 text-ink-2" aria-busy="true">Loading the method…</p></main>}>
+        <Method manifest={data?.manifest ?? null} repo={REPO} brazil={data?.areas.BR ?? null} />
+      </Suspense>
+    )
   } else if (loadError) {
     body = (
       <main className="p-6" role="alert">

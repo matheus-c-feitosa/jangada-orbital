@@ -3,8 +3,8 @@ import { Map as MapLibre, setWorkerUrl, type ExpressionSpecification, type GeoJS
 import 'maplibre-gl/dist/maplibre-gl.css'
 // MapLibre 6 builds its worker URL at runtime, which bundlers cannot see; ship the worker as an asset instead.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
-import { TerraDraw, TerraDrawPolygonMode, TerraDrawRectangleMode } from 'terra-draw'
-import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter'
+// terra-draw loads the first time someone draws (see the drawMode effect); only its type is needed up front
+import type { TerraDraw } from 'terra-draw'
 import { Flame, X } from 'lucide-react'
 import type { Ring } from '../geo/aoi'
 import { recurrenceClass, yearsWithFire, type Recent, type Recurrence } from '../data/extras'
@@ -231,21 +231,6 @@ export function MapView(p: Props) {
     map.on('style.load', () => {
       window.clearTimeout(timer)
       addOverlays(map, states)
-      if (!drawRef.current) {
-        const draw = new TerraDraw({
-          adapter: new TerraDrawMapLibreGLAdapter({ map }),
-          modes: [new TerraDrawRectangleMode(), new TerraDrawPolygonMode()],
-        })
-        draw.start()
-        draw.on('finish', (id) => {
-          const feature = draw.getSnapshotFeature(id)
-          const coords = feature?.geometry.type === 'Polygon' ? (feature.geometry.coordinates[0] as Ring) : null
-          draw.clear()
-          draw.setMode('static')
-          if (coords && coords.length >= 4) onDrawnRef.current(coords)
-        })
-        drawRef.current = draw
-      }
       loaded = true
       setReady(true)
     })
@@ -290,12 +275,18 @@ export function MapView(p: Props) {
     map.fitBounds(bounds ?? BRAZIL, { padding: 24, maxZoom: 7.5, duration: 600 })
   }, [ready, stateCode, ring, bounds, p.biomeId])
 
+  // Outlines go to the map only while something shows them (borders on, or a biome selected), and only once.
+  const biomesSent = useRef<GeoJSON.FeatureCollection | null>(null)
   useEffect(() => {
     const map = mapRef.current
     if (!ready || !map) return
-    ;(map.getSource('biomes') as GeoJSONSource | undefined)?.setData(p.biomes ?? EMPTY)
+    const shown = !!p.biomes && (p.biomeBorders || !!p.biomeId)
+    if (shown && biomesSent.current !== p.biomes) {
+      ;(map.getSource('biomes') as GeoJSONSource | undefined)?.setData(p.biomes!)
+      biomesSent.current = p.biomes
+    }
     map.setLayoutProperty('biomes-line', 'visibility', p.biomeBorders && p.biomes ? 'visible' : 'none')
-  }, [ready, p.biomes, p.biomeBorders])
+  }, [ready, p.biomes, p.biomeBorders, p.biomeId])
 
   useEffect(() => {
     const map = mapRef.current
@@ -315,18 +306,44 @@ export function MapView(p: Props) {
     if (img) (map.getSource('recurrence') as ImageSource | undefined)?.updateImage(img)
   }, [ready, p.recurrence, from, to, layer])
 
+  // the last-7-days points go to the map only while that layer is on, and only once
+  const recentSent = useRef<Recent | null>(null)
   useEffect(() => {
     const map = mapRef.current
-    if (!ready || !map) return
+    if (!ready || !map || layer !== 'recent' || !p.recent || recentSent.current === p.recent) return
     ;(map.getSource('recent') as GeoJSONSource | undefined)?.setData(recentGeoJson(p.recent))
-  }, [ready, p.recent])
+    recentSent.current = p.recent
+  }, [ready, p.recent, layer])
 
   useEffect(() => { if (drawMode !== 'none') setPop(null) }, [drawMode])
 
   useEffect(() => {
-    const draw = drawRef.current
-    if (!ready || !draw) return
-    draw.setMode(drawMode === 'none' ? 'static' : drawMode)
+    const map = mapRef.current
+    if (!ready || !map) return
+    if (drawRef.current) { drawRef.current.setMode(drawMode === 'none' ? 'static' : drawMode); return }
+    if (drawMode === 'none') return
+    // first drawing: load terra-draw now (about 160 KB of script nobody needs until then)
+    let cancelled = false
+    Promise.all([import('terra-draw'), import('terra-draw-maplibre-gl-adapter')])
+      .then(([td, adapter]) => {
+        if (cancelled || mapRef.current !== map || drawRef.current) return
+        const draw = new td.TerraDraw({
+          adapter: new adapter.TerraDrawMapLibreGLAdapter({ map }),
+          modes: [new td.TerraDrawRectangleMode(), new td.TerraDrawPolygonMode()],
+        })
+        draw.start()
+        draw.on('finish', (id) => {
+          const feature = draw.getSnapshotFeature(id)
+          const coords = feature?.geometry.type === 'Polygon' ? (feature.geometry.coordinates[0] as Ring) : null
+          draw.clear()
+          draw.setMode('static')
+          if (coords && coords.length >= 4) onDrawnRef.current(coords)
+        })
+        drawRef.current = draw
+        draw.setMode(drawModeRef.current === 'none' ? 'static' : drawModeRef.current)
+      })
+      .catch((e: Error) => console.warn('drawing tools could not load:', e.message))
+    return () => { cancelled = true }
   }, [ready, drawMode])
 
   const box = container.current?.getBoundingClientRect()
