@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { SATELLITES, type AppData, type Satellite } from './data/load'
 import { circleRing, type Ring } from './geo/aoi'
-import { MapView, type DrawMode, type Theme } from './map/MapView'
+import type { DrawMode, MapLayer } from './map/MapView'
 
 export type Area = { kind: 'country' } | { kind: 'state'; uf: string } | { kind: 'ring'; ring: Ring; label: string }
 export type View = 'harmonized' | 'observed'
@@ -24,13 +24,12 @@ const tall = 'h-10 flex-1 gap-2 text-sm data-[active=true]:border-brand data-[ac
 
 interface Props {
   data: AppData
-  theme: Theme
   area: Area
   onArea: (area: Area) => void
-  areaBounds: [number, number, number, number] | null
   drawMode: DrawMode
   onDrawMode: (mode: DrawMode) => void
-  onDrawn: (ring: Ring) => void
+  layer: MapLayer
+  onLayer: (layer: MapLayer) => void
   view: View
   onView: (view: View) => void
   sat: Satellite
@@ -43,7 +42,7 @@ interface Props {
   onDownload: () => void
 }
 
-/** Area selection, map, view and range controls. Rendered as a sidebar on desktop and inside a sheet on phones. */
+/** Area, map layers, values and range. A sidebar on desktop, a side drawer on tablets and a full sheet on phones. */
 export function AreaPanel(p: Props) {
   const [circle, setCircle] = useState({ lat: '-7.23', lon: '-39.31', km: '30' })
   const [circleError, setCircleError] = useState<string | null>(null)
@@ -105,8 +104,21 @@ export function AreaPanel(p: Props) {
         </form>
       </div>
 
-      <MapView key={p.theme} theme={p.theme} states={p.data.states} stateCode={p.area.kind === 'state' ? p.area.uf : null}
-        ring={p.area.kind === 'ring' ? p.area.ring : null} bounds={p.areaBounds} drawMode={p.drawMode} onDrawn={p.onDrawn} />
+
+      <fieldset className={card + ' m-0'}>
+        <legend className="sr-only">Map layers</legend>
+        <span className={label} aria-hidden="true">Map layers</span>
+        <div className={field}>
+          <span className="text-xs text-ink-3">Data on the map, one at a time</span>
+          {([['normal', 'This year vs normal, by state'], ['none', 'No data layer']] as const).map(([v, text]) => (
+            <label key={v} className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
+              <input type="radio" name="map-layer" className="size-5 accent-[var(--brand)]" checked={p.layer === v} onChange={() => p.onLayer(v)} />
+              {text}
+            </label>
+          ))}
+          <p className="m-0 text-xs text-ink-3">Fire recurrence, biomes and municipalities need new data from the pipeline and come in a later version.</p>
+        </div>
+      </fieldset>
 
       <div className={card}>
         <div className={field}>

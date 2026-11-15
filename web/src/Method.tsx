@@ -1,5 +1,6 @@
 import type { AreaSeries, Manifest } from './data/load'
 import { Explainer } from './pages/Explainer'
+import { SensorTimeline, ViirsAgreement } from './pages/MethodCharts'
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
 
@@ -15,6 +16,8 @@ export function Method({ manifest, repo, brazil }: { manifest: Manifest | null; 
         unit: <strong>Aqua-MODIS-equivalent detections</strong>, the count the Aqua satellite would have reported.
       </p>
       <Explainer brazil={brazil} manifest={manifest} />
+      <SensorTimeline dataDate={manifest?.data_date ?? '2026-11-14'} />
+      <ViirsAgreement brazil={brazil} />
       <h2>Steps</h2>
       <ol>
         <li>NASA FIRMS hotspots for Brazil, November 2000 to {manifest?.data_date ?? 'today'}: vegetation fires only, low-confidence detections removed.</li>
@@ -41,6 +44,10 @@ export function Method({ manifest, repo, brazil }: { manifest: Manifest | null; 
         <li><strong>Fire-season rhythm:</strong> a season year starts in the area's calmest month, so seasons that cross New
           Year stay whole. Start, middle and end are the moments the season reaches 10%, 50% and 90% of its detections. A
           change of the start is stated only when the first and last ten seasons differ by at least two weeks.</li>
+        <li><strong>Total per year:</strong> the sum of the twelve months; on converted years (Terra, VIIRS) the whisker is
+          the P25–P75 range of the conversion. The line is the median of the complete years.</li>
+        <li><strong>This year vs normal (map) and ranking:</strong> each state's detections since January, ranked against
+          the same date in every previous complete year (the same comparison as “so far”). The colour is that percentile.</li>
         <li><strong>Density:</strong> detections per 1,000 km², using the geodesic area of the selection (IBGE outlines for
           Brazil and states, the drawn shape otherwise), so areas of different sizes can be compared.</li>
       </ul>

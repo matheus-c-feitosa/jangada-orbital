@@ -1,21 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ExternalLink, MapPinned, Moon, Sun } from 'lucide-react'
+import { CalendarDays, ChevronDown, ExternalLink, Moon, SlidersHorizontal, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { loadAppData, type AppData, type AreaSeries, type Satellite } from './data/load'
 import { seriesForRing } from './data/queries'
 import { buildCsv, csvFileName, downloadText } from './data/csv'
 import { ringBounds, type Ring } from './geo/aoi'
 import { compareMonth } from './calendar/stats'
 import { AnswerLine } from './calendar/AnswerLine'
-import { CalendarTable } from './calendar/CalendarTable'
-import { SeasonRhythm } from './calendar/SeasonRhythm'
-import { YearToDate } from './calendar/YearToDate'
-import type { DrawMode, Theme } from './map/MapView'
-import { AreaPanel, SAT_LABEL, type Area, type View } from './AreaPanel'
+import { MapView, type DrawMode, type MapLayer, type StateStanding, type Theme } from './map/MapView'
+import { AreaPanel, type Area, type View } from './AreaPanel'
+import { DataPanel, type Tab } from './DataPanel'
+import { MAX_COMPARE } from './rank/RankingTable'
+import { ytdStanding } from './rank/ranking'
 import { Method } from './Method'
 
 const REPO = 'https://github.com/matheus-c-feitosa/jangada-orbital'
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 function initialTheme(): Theme {
   try {
@@ -49,14 +50,21 @@ function usePage(): ['calendar' | 'method', (p: 'calendar' | 'method') => void] 
 }
 
 const navLink = 'inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-sm text-ink-2 hover:bg-surface-2 hover:text-ink aria-[current=page]:bg-surface-2 aria-[current=page]:text-ink max-lg:px-2'
+const floating = 'shadow-[0_4px_12px_rgb(0_0_0/0.35)]'
 
 export function App() {
   const [data, setData] = useState<AppData | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [theme, setTheme] = useState<Theme>(initialTheme)
   const [page, setPage] = usePage()
+  // Layouts of the new UI: three columns from 1024 px, map over data on tablets, map with a data drawer on phones.
   const desktop = useMediaQuery('(min-width: 1024px)')
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const phone = useMediaQuery('(max-width: 599px)')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [tab, setTab] = useState<Tab>('calendar')
+  const [layer, setLayer] = useState<MapLayer>('normal')
+  const [compare, setCompare] = useState<string[]>([])
   const [area, setArea] = useState<Area>({ kind: 'country' })
   const [ringSeries, setRingSeries] = useState<(AreaSeries & { cells: number }) | null>(null)
   const [areaLoading, setAreaLoading] = useState(false)
@@ -100,12 +108,25 @@ export function App() {
   const endYear = toYear ?? lastYear
   const partialMonth = data ? data.manifest.last_month.slice(0, 7) : ''
   const partialDays = data?.manifest.last_month_days ?? 0
+  const dateLabel = data ? `${Number(data.manifest.data_date.slice(8, 10))} ${MONTH_ABBR[Number(data.manifest.data_date.slice(5, 7)) - 1]}` : ''
 
   const comparison = useMemo(() => {
     if (!series) return null
     const t = series.months.indexOf(partialMonth)
     return t < 0 ? null : compareMonth(series.months, series.value, t, partialDays)
   }, [series, partialMonth, partialDays])
+
+  // This year against previous years for every state: the map layer and its popover (spec 002, story 2).
+  const standings = useMemo(() => {
+    const out: Record<string, StateStanding> = {}
+    if (!data) return out
+    for (const s of data.stateList) {
+      const a = data.areas[s.uf]
+      const st = a && ytdStanding(a.months, a.value, partialMonth, partialDays)
+      if (st) out[s.uf] = { name: a.name, ytd: st.current, percentile: st.percentile, first: st.first, last: st.last }
+    }
+    return out
+  }, [data, partialMonth, partialDays])
 
   const areaName = !data ? 'Brazil'
     : area.kind === 'country' ? 'Brazil'
@@ -119,17 +140,29 @@ export function App() {
     return null
   }, [data, area])
 
-  // On phones the sheet closes once an area is chosen, so the answer and calendar come straight into view.
+  // Choosing an area closes the filters on tablets and phones, so the answer comes straight into view.
   const chooseArea = useCallback((next: Area) => {
     setArea(next)
-    setSheetOpen(false)
+    setFiltersOpen(false)
+  }, [])
+  const pickState = useCallback((uf: string) => {
+    setArea({ kind: 'state', uf })
+    setFiltersOpen(false)
+    setDrawerOpen(false)
+  }, [])
+  const toggleCompare = useCallback((uf: string) => {
+    setCompare((c) => (c.includes(uf) ? c.filter((x) => x !== uf) : c.length < MAX_COMPARE ? [...c, uf] : c))
   }, [])
 
   const onDrawn = useCallback((ring: Ring) => {
     setDrawMode('none')
     const [w, s, e, n] = ringBounds(ring)
     setArea({ kind: 'ring', ring, label: `Drawn area (${s.toFixed(2)}°, ${w.toFixed(2)}° to ${n.toFixed(2)}°, ${e.toFixed(2)}°)` })
-    setSheetOpen(false)
+  }, [])
+  // On tablets and phones the filters cover the map; close them while the user draws.
+  const startDraw = useCallback((mode: DrawMode) => {
+    setDrawMode(mode)
+    if (mode !== 'none') { setFiltersOpen(false); setDrawerOpen(false) }
   }, [])
 
   const download = () => {
@@ -144,16 +177,149 @@ export function App() {
     downloadText(csv, csvFileName(data.manifest, areaName))
   }
 
-  const values = !series ? [] : view === 'harmonized' ? series.value : series.observed[sat]
   const years = Array.from({ length: lastYear - 2001 + 1 }, (_, i) => 2001 + i)
   const empty = area.kind === 'ring' && ringSeries?.cells === 0
 
-  const panel = data && (
-    <AreaPanel data={data} theme={theme} area={area} onArea={chooseArea} areaBounds={areaBounds}
-      drawMode={drawMode} onDrawMode={setDrawMode} onDrawn={onDrawn} view={view} onView={setView} sat={sat} onSat={setSat}
+  const filters = data && (
+    <AreaPanel data={data} area={area} onArea={chooseArea} drawMode={drawMode} onDrawMode={startDraw} layer={layer} onLayer={setLayer}
+      view={view} onView={setView} sat={sat} onSat={setSat}
       years={years} fromYear={fromYear} toYear={endYear} onRange={(f, t) => { setFromYear(f); setToYear(t) }}
       canDownload={!!series && !areaLoading} onDownload={download} />
   )
+
+  const map = data && (
+    <MapView key={theme} theme={theme} states={data.states} stateCode={area.kind === 'state' ? area.uf : null}
+      ring={area.kind === 'ring' ? area.ring : null} bounds={areaBounds} drawMode={drawMode} onDrawn={onDrawn}
+      layer={layer} standings={standings} dateLabel={dateLabel} onPickState={pickState} compact={phone} className="h-full" />
+  )
+
+  // shown in every layout: without them a failed or empty drawn area reads as "loading" or "no fires, as usual"
+  const notices = (
+    <>
+      {areaError && <p className="text-[13px] text-unusual" role="alert">{areaError}</p>}
+      {empty && <p className="text-[13px] text-ink-3" role="status">This area has no grid cells inside Brazil. Draw inside Brazil or pick a state.</p>}
+    </>
+  )
+
+  const answer = data && (
+    <>
+      <AnswerLine areaName={areaName} comparison={comparison} loading={areaLoading || !series}
+        cells={area.kind === 'ring' ? ringSeries?.cells : undefined} lastDayPartial={data.manifest.last_day_partial} areaKm2={series?.area_km2} />
+      {notices}
+    </>
+  )
+
+  // on tablets and phones the filters close while drawing, so the map carries the instructions and a way out
+  const drawHint = drawMode !== 'none' && (
+    <p role="status" className={`absolute inset-x-3 top-3 z-10 m-0 rounded-xl border border-brand bg-surface px-4 py-3 text-sm ${floating}`}>
+      {drawMode === 'rectangle' ? 'Tap two opposite corners on the map.' : 'Tap each corner; tap the first point to close.'}{' '}
+      <button type="button" className="font-semibold text-ink underline" onClick={() => setDrawMode('none')}>Cancel</button>
+    </p>
+  )
+
+  const dataPanel = data && (
+    <DataPanel data={data} series={series} loading={areaLoading} areaName={series?.name ?? areaName} selectedUf={area.kind === 'state' ? area.uf : null}
+      view={view} sat={sat} fromYear={fromYear} toYear={endYear} partialMonth={partialMonth} partialDays={partialDays}
+      tab={tab} onTab={setTab} compare={compare} onToggleCompare={toggleCompare} onSelectState={pickState} narrow={phone} />
+  )
+
+  const filtersSheet = (
+    <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+      <SheetContent side={phone ? 'bottom' : 'left'}
+        className={phone ? 'h-[100dvh] max-h-[100dvh] overflow-y-auto rounded-none px-4 pb-6' : 'w-[380px] max-w-[90vw] overflow-y-auto px-4 pb-6 sm:max-w-[380px]'}>
+        <SheetHeader className="px-0">
+          <SheetTitle>Area and layers</SheetTitle>
+          <SheetDescription>Pick a state, draw an area or type a point and radius.</SheetDescription>
+        </SheetHeader>
+        {filters}
+      </SheetContent>
+    </Sheet>
+  )
+  const filtersButton = (
+    <Button variant="outline" className={`h-11 gap-2 bg-surface text-sm ${floating}`} onClick={() => setFiltersOpen(true)}>
+      <SlidersHorizontal aria-hidden="true" /> Area and layers
+    </Button>
+  )
+
+  let body
+  if (page === 'method') {
+    body = <Method manifest={data?.manifest ?? null} repo={REPO} brazil={data?.areas.BR ?? null} />
+  } else if (loadError) {
+    body = (
+      <main className="p-6" role="alert">
+        <p className="text-ink-2">The fire data could not be loaded ({loadError}).</p>
+        <Button variant="outline" className="h-10" onClick={load}>Try again</Button>
+      </main>
+    )
+  } else if (!data) {
+    body = <main className="p-6"><p className="py-12 text-ink-2" aria-busy="true">Loading 26 years of fire data…</p></main>
+  } else if (desktop) {
+    body = (
+      <div className="grid h-[calc(100dvh-56px)] grid-cols-[300px_minmax(0,1fr)_minmax(420px,460px)] overflow-hidden">
+        <aside className="relative overflow-y-auto border-r border-line bg-surface/40 p-4" aria-label="Area and layers">{filters}</aside>
+        <section className="relative min-w-0" aria-label="Map">{map}</section>
+        <main className="relative min-w-0 overflow-y-auto border-l border-line p-5">
+          {answer}
+          {dataPanel}
+        </main>
+      </div>
+    )
+  } else if (!phone) {
+    body = (
+      <>
+        <section className="relative h-[48vh] min-h-[320px]" aria-label="Map">
+          {map}
+          {drawHint || <div className="absolute left-3 top-3 z-10">{filtersButton}</div>}
+        </section>
+        <main className="min-w-0 p-5">
+          {answer}
+          {dataPanel}
+        </main>
+        {filtersSheet}
+      </>
+    )
+  } else {
+    body = (
+      <>
+        <section className="relative h-[calc(100dvh-56px-260px)] min-h-[280px]" aria-label="Map">
+          {map}
+          {drawHint}
+        </section>
+        <main
+          className={drawerOpen
+            ? 'fixed inset-x-0 bottom-0 z-30 flex h-[calc(100dvh-104px)] flex-col rounded-t-2xl border-t border-line bg-surface shadow-[0_-8px_24px_rgb(0_0_0/0.4)]'
+            : 'flex h-[260px] flex-col rounded-t-2xl border-t border-line bg-surface'}
+          aria-label="Fire data for the selected area">
+          <button type="button" className="flex h-7 w-full shrink-0 items-center justify-center" onClick={() => setDrawerOpen(!drawerOpen)}
+            aria-expanded={drawerOpen} aria-label={drawerOpen ? 'Collapse to the map' : 'Expand the fire data'}>
+            <span className="h-1 w-10 rounded-full bg-line" />
+          </button>
+          {drawerOpen ? (
+            <>
+              <div className="flex shrink-0 items-center gap-3 px-4 pb-3">
+                <h1 className="m-0 min-w-0 flex-1 truncate text-base font-semibold">{areaName}</h1>
+                <button type="button" className="inline-flex size-11 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2"
+                  onClick={() => setDrawerOpen(false)} aria-label="Back to the map"><ChevronDown size={20} aria-hidden="true" /></button>
+              </div>
+              <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6">{notices}{dataPanel}</div>
+            </>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {notices}
+                <AnswerLine areaName={areaName} comparison={comparison} loading={areaLoading || !series} lastDayPartial={data.manifest.last_day_partial} brief />
+              </div>
+              <div className="grid shrink-0 grid-cols-2 gap-2">
+                <Button variant="outline" className="h-11 gap-2 text-sm" onClick={() => setFiltersOpen(true)}><SlidersHorizontal aria-hidden="true" /> Area and layers</Button>
+                <Button className="h-11 gap-2 text-sm" onClick={() => setDrawerOpen(true)}><CalendarDays aria-hidden="true" /> Fire calendar</Button>
+              </div>
+            </div>
+          )}
+        </main>
+        {filtersSheet}
+      </>
+    )
+  }
 
   return (
     <>
@@ -174,59 +340,7 @@ export function App() {
           </a>
         </nav>
       </header>
-
-      {page === 'method' ? (
-        <Method manifest={data?.manifest ?? null} repo={REPO} brazil={data?.areas.BR ?? null} />
-      ) : loadError ? (
-        <main className="p-6" role="alert">
-          <p className="text-ink-2">The fire data could not be loaded ({loadError}).</p>
-          <Button variant="outline" className="h-10" onClick={load}>Try again</Button>
-        </main>
-      ) : !data ? (
-        <main className="p-6"><p className="py-12 text-ink-2" aria-busy="true">Loading 26 years of fire data…</p></main>
-      ) : (
-        <div className="grid items-start gap-6 p-6 lg:grid-cols-[340px_minmax(0,1fr)] max-lg:gap-4 max-lg:p-4">
-          {desktop ? (
-            <aside className="sticky top-6" aria-label="Area and view">{panel}</aside>
-          ) : (
-            <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-              <SheetTrigger asChild>
-                <Button variant="outline" className="h-11 w-full gap-2 text-sm"><MapPinned aria-hidden="true" /> Choose area</Button>
-              </SheetTrigger>
-              <SheetContent side="bottom" className="max-h-[88vh] overflow-y-auto px-4 pb-6">
-                <SheetHeader className="px-0">
-                  <SheetTitle>Area and view</SheetTitle>
-                  <SheetDescription>Pick a state, draw an area or type a point and radius.</SheetDescription>
-                </SheetHeader>
-                {panel}
-              </SheetContent>
-            </Sheet>
-          )}
-
-          <main className="min-w-0">
-            <AnswerLine areaName={areaName} comparison={comparison} loading={areaLoading || !series}
-              cells={area.kind === 'ring' ? ringSeries?.cells : undefined} lastDayPartial={data.manifest.last_day_partial} areaKm2={series?.area_km2} />
-            {areaError && <p className="text-[13px] text-unusual" role="alert">{areaError}</p>}
-            {empty && <p className="text-[13px] text-ink-3" role="status">This area has no grid cells inside Brazil. Draw inside Brazil or pick a state.</p>}
-            {series && !areaLoading && (
-              <CalendarTable
-                months={series.months}
-                values={values}
-                source={view === 'harmonized' ? series.source : null}
-                fromYear={fromYear}
-                toYear={endYear}
-                partialMonth={partialMonth}
-                partialDays={partialDays}
-                caption={view === 'harmonized'
-                  ? 'Fire detections per month, harmonized (Aqua-MODIS equivalent)'
-                  : `Fire detections per month as delivered by ${SAT_LABEL[sat]} (not comparable across sensors)`}
-              />
-            )}
-            {series && !areaLoading && <YearToDate months={series.months} values={series.value} lastMonth={partialMonth} days={partialDays} />}
-            {series && !areaLoading && <SeasonRhythm months={series.months} values={series.value} fromYear={fromYear} toYear={endYear} />}
-          </main>
-        </div>
-      )}
+      {body}
     </>
   )
 }

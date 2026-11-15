@@ -13,14 +13,16 @@ interface Props {
   cells?: number
   lastDayPartial?: boolean
   areaKm2?: number
+  /** phone peek: only the name, the answer and the badge */
+  brief?: boolean
 }
 
 /** The one job of the screen: is this month unusual for this area? (FR-006, SC-001) */
-export function AnswerLine({ areaName, comparison: c, loading, cells, lastDayPartial, areaKm2 }: Props) {
+export function AnswerLine({ areaName, comparison: c, loading, cells, lastDayPartial, areaKm2, brief }: Props) {
   if (loading || !c) {
     return (
       <section className="flex flex-col gap-2 mb-5" aria-busy="true">
-        <h1 className="m-0 text-[28px] font-semibold leading-tight tracking-[-0.02em] text-balance max-lg:text-[22px]">{areaName}</h1>
+        <h1 className="m-0 text-[28px] font-semibold leading-tight tracking-[-0.02em] text-balance max-lg:text-[22px] max-sm:text-xl">{areaName}</h1>
         <p className="m-0 text-lg text-ink-2">Loading fire history…</p>
       </section>
     )
@@ -32,8 +34,8 @@ export function AnswerLine({ areaName, comparison: c, loading, cells, lastDayPar
     : `${monthName} ${y}`
   const usual = c.partial ? 'the usual pace for these days' : `the usual ${monthName}`
   return (
-    <section className="flex flex-col gap-2 mb-5" aria-live="polite">
-      <h1 className="m-0 text-[28px] font-semibold leading-tight tracking-[-0.02em] text-balance max-lg:text-[22px]">{areaName}</h1>
+    <section className={`flex flex-col gap-2 ${brief ? "mb-3" : "mb-5"}`} aria-live="polite">
+      <h1 className="m-0 text-[28px] font-semibold leading-tight tracking-[-0.02em] text-balance max-lg:text-[22px] max-sm:text-xl">{areaName}</h1>
       {c.median === 0 && c.value === 0 ? (
         <p className="m-0 max-w-[70ch] text-lg leading-relaxed text-pretty max-lg:text-base">{period}: no fires detected, as usual for {monthName}.</p>
       ) : (
@@ -46,17 +48,17 @@ export function AnswerLine({ areaName, comparison: c, loading, cells, lastDayPar
           )}
         </p>
       )}
-      <p className="m-0 text-sm text-ink-2 tabular-nums">
+      {!brief && <p className="m-0 text-sm text-ink-2 tabular-nums">
         {c.partial ? 'On pace for' : 'Ranks'} #{c.rank} of {c.of} {monthName}s since {y - c.of + 1} · usual {monthName}:{' '}
         {fmt.format(c.median)} detections{cells !== undefined ? ` · ${fmt.format(cells)} grid cells` : ''}
-      </p>
-      {areaKm2 ? (
+      </p>}
+      {areaKm2 && !brief ? (
         <p className="m-0 text-sm text-ink-2 tabular-nums">
           Area {fmt.format(areaKm2)} km² · usual {monthName}: {density.format((c.median / areaKm2) * 1000)} detections per 1,000 km²
           {c.partial ? '' : ` · ${monthName} ${y}: ${density.format((c.value / areaKm2) * 1000)}`}
         </p>
       ) : null}
-      <a href="#why" className="w-fit text-sm text-ink-2 underline underline-offset-[3px] hover:text-ink">Why these numbers?</a>
+      {!brief && <a href="#why" className="w-fit text-sm text-ink-2 underline underline-offset-[3px] hover:text-ink">Why these numbers?</a>}
       {c.unusual ? (
         <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-current px-2.5 py-1 text-sm font-semibold text-unusual"><AlertTriangle size={16} aria-hidden="true" /> Unusual: above the 90th percentile of past {monthName}s</span>
       ) : (

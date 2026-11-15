@@ -103,13 +103,13 @@ export function CalendarTable({ months, values, source, fromYear, toYear, partia
   return (
     <div>
       <div className="overflow-x-auto">
-        <table className="border-separate border-spacing-[3px] text-xs tabular-nums max-lg:border-spacing-[2px] max-lg:text-[11px]">
+        <table className="w-full table-fixed border-separate border-spacing-[3px] text-xs tabular-nums max-sm:border-spacing-[2px] max-sm:text-[11px]">
           <caption className="pb-1.5 text-left text-[13px] text-ink-2">{caption}</caption>
           <thead>
             <tr>
-              <td />
+              <td className="w-14 max-sm:w-10" />
               {MONTHS.map((m) => (
-                <th key={m} scope="col" abbr={m} className="h-[22px] px-1.5 text-center font-medium text-ink-3">{m[0]}<span className="sr-only">{m.slice(1)}</span></th>
+                <th key={m} scope="col" abbr={m} className="h-[22px] px-0 text-center font-medium text-ink-3">{m[0]}<span className="sr-only">{m.slice(1)}</span></th>
               ))}
             </tr>
           </thead>
@@ -119,13 +119,13 @@ export function CalendarTable({ months, values, source, fromYear, toYear, partia
               const estimated = row.some((c) => c.source !== null && c.source > 0)
               return (
                 <tr key={year}>
-                  <th scope="row" className="whitespace-nowrap px-1.5 text-right font-medium text-ink-3">{year}{estimated && <small className="ml-1 font-normal max-lg:ml-0 max-lg:block max-lg:leading-none">est.</small>}</th>
+                  <th scope="row" className="whitespace-nowrap px-1.5 text-right font-medium text-ink-3">{year}{estimated && <small className="ml-1 font-normal max-sm:ml-0 max-sm:block max-sm:leading-none">est.</small>}</th>
                   {row.map((c) => (
                     <td key={c.month} className="p-0">
                       <button
                         type="button"
                         ref={(el) => { if (el) buttons.current.set(c.month, el); else buttons.current.delete(c.month) }}
-                        className={`cell relative block h-5 w-[clamp(17px,4.2vw,52px)] cursor-pointer rounded border-0 p-0 hover:shadow-[0_0_0_2px_var(--ink-3)] data-[active=true]:shadow-[0_0_0_2px_var(--ink)] max-lg:w-[clamp(17px,5.1vw,52px)] ${c.cls < 0 ? 'cursor-default border border-dashed border-line bg-transparent' : BG[c.cls]}${c.month === partialMonth ? ' cell-partial' : ''}${c.unusual ? ' cell-unusual' : ''}`}
+                        className={`cell relative block h-5 w-full cursor-pointer rounded border-0 p-0 hover:shadow-[0_0_0_2px_var(--ink-3)] data-[active=true]:shadow-[0_0_0_2px_var(--ink)] ${c.cls < 0 ? 'cursor-default border border-dashed border-line bg-transparent' : BG[c.cls]}${c.month === partialMonth ? ' cell-partial' : ''}${c.unusual ? ' cell-unusual' : ''}`}
                         tabIndex={c.month === activeCell.month ? 0 : -1}
                         aria-label={label(c)}
                         data-active={c.month === activeCell.month}

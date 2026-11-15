@@ -73,14 +73,18 @@ The download is resumable: stop it and run it again at any time. For long runs o
 cd web
 npm ci
 npm run dev        # http://localhost:5173 (reads web/public/data, produced by jangada-export-web)
-npm test           # vitest: area → cells, month comparison, CSV
-npm run e2e        # playwright: built site, calendar, CSV download, Method page (outside hosts blocked)
+npm test           # vitest: area → cells, month comparison, yearly totals, ranking, CSV
+npm run e2e        # playwright: built site, tabs, ranking, map layer, phone drawer, CSV, Method (outside hosts blocked)
 npm run build      # typecheck + static build in web/dist (deployed to GitHub Pages by .github/workflows/pages.yml)
 ```
 
 Stack: React, Vite, TypeScript, Tailwind CSS 4 + shadcn/ui (Radix), MapLibre GL (OpenFreeMap basemap, © OpenStreetMap
 contributors), terra-draw, hyparquet. Colors live once in `web/src/styles.css` (Jangada tokens → shadcn variables →
 Tailwind theme); the dark theme follows `<html data-theme>`.
+Layout (spec 002): from 1024 px three columns (area and layers, map, data); on tablets the map sits above the data and
+the filters open in a side drawer; on phones the map comes first and the data opens in a bottom drawer. The data
+column has four tabs: Calendar (with the yearly totals and their conversion range), this year so far (with up to three
+compared states per 1,000 km²), Season and Ranking. The map can paint each state by this year against normal.
 Brazil and the 27 states load from `series.json`. Drawn areas fetch only the 2° × 2° tiles they touch
 (`web/public/data/tiles/`, a few hundred KB; GitHub Pages gzips `.parquet`, which rules out HTTP range requests).
 The full harmonized and observed datasets stay downloadable as `web/public/data/*.parquet`. No server, no login,
