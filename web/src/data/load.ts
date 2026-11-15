@@ -66,11 +66,15 @@ export interface AppData {
 }
 
 // GitHub Pages caches every file for 10 minutes. The manifest is always revalidated; every other data file carries
-// the data version in its URL, so a new export can never be mixed with a stale cached file.
+// a version in its URL, so a new export can never be mixed with a stale cached file. Files listed in the manifest
+// carry their own hash (recent.json changes with every near-real-time download, the harmonized data does not); the
+// rest (tiles, municipality outlines) carry the hash of the harmonized data they come from.
 let dataVersion = ''
+let fileVersions: Record<string, string> = {}
 export const dataUrl = (file: string) => {
   const url = new URL(`data/${file}`, document.baseURI)
-  if (dataVersion) url.searchParams.set('v', dataVersion)
+  const v = fileVersions[file] ?? dataVersion
+  if (v) url.searchParams.set('v', v)
   return url.href
 }
 
@@ -82,9 +86,11 @@ async function getJson<T>(file: string, init?: RequestInit): Promise<T> {
 
 export async function loadAppData(): Promise<AppData> {
   dataVersion = ''
+  fileVersions = {}
   const manifest = await getJson<Manifest>('manifest.json', { cache: 'no-cache' })
   if (manifest.schema !== 1 || !manifest.tiles) throw new Error(`Unsupported data schema ${manifest.schema}`)
   dataVersion = manifest.files.harmonized.sha256.slice(0, 12)
+  fileVersions = Object.fromEntries(Object.values(manifest.files).filter((f) => f.sha256).map((f) => [f.path, f.sha256.slice(0, 12)]))
   const [doc, states] = await Promise.all([
     getJson<SeriesDoc>('series.json'),
     getJson<GeoJSON.FeatureCollection>('states.geojson'),

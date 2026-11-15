@@ -34,12 +34,22 @@ export function defaultArea(kind: 'biome' | 'state', data: AppData, biomes: Biom
   return s ? { kind: 'state', uf: s.uf } : null
 }
 
+// one collator for the 5 thousand names: localeCompare with a locale builds a new one on every comparison
+const PT_ORDER = new Intl.Collator('pt-BR')
+
+/** Lower case without accents, for searching names: "São Paulo" and "sao paulo" fold to the same text. */
+export const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('pt-BR')
+
 /** Municipality search: "Iguatu, CE" → its row, for an <input list> with a datalist. */
 export function useMuniIndex(munis: MuniRanking | null) {
   return useMemo(() => {
     const byLabel = new Map<string, [string, string, string]>()
     for (const [id, name, uf] of munis?.rows ?? []) byLabel.set(`${name}, ${uf}`, [id, uf, name])
-    return { byLabel, labels: [...byLabel.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR')) }
+    const labels = [...byLabel.keys()].sort(PT_ORDER.compare)
+    // folded once, for the phone search that filters on every key press
+    const folded = labels.map(fold)
+    const byFolded = new Map(folded.map((f, k) => [f, labels[k]]))
+    return { byLabel, labels, folded, byFolded }
   }, [munis])
 }
 
@@ -89,12 +99,12 @@ interface Props {
   onStateBorders: (on: boolean) => void
   places: boolean
   onPlaces: (on: boolean) => void
-  /** recurrence: years available and the chosen period */
-  recurrenceYears: [number, number] | null
+  /** recurrence: years available and the chosen period; undefined while the file loads, null when not published */
+  recurrenceYears: [number, number] | null | undefined
   period: [number, number]
   onPeriod: (period: [number, number]) => void
-  /** whether the last-7-days file is published, and its dates */
-  recentSpan: string | null
+  /** dates of the last-7-days file; undefined until its layer is picked (it loads then), null when not published */
+  recentSpan: string | null | undefined
   view: View
   onView: (view: View) => void
   sat: Satellite
@@ -133,14 +143,15 @@ export function AreaPanel(p: Props) {
   }
   const onMuniText = (text: string) => {
     setMuniText(text)
-    const hit = muni.byLabel.get(text)
+    // a name picked from the list, or typed in full without accents ("sao paulo, sp")
+    const hit = muni.byLabel.get(text) ?? muni.byLabel.get(muni.byFolded.get(fold(text.trim())) ?? '')
     if (hit) p.onPickMuni(hit[0], hit[1], hit[2])
   }
   const yearsFor = p.recurrenceYears ? Array.from({ length: p.recurrenceYears[1] - p.recurrenceYears[0] + 1 }, (_, k) => p.recurrenceYears![0] + k) : []
   const layers: [MapLayer, string, string | null][] = [
-    ['recurrence', i.t('layerRecurrence'), p.recurrenceYears ? null : i.t('notPublished')],
+    ['recurrence', i.t('layerRecurrence'), p.recurrenceYears === null ? i.t('notPublished') : null],
     ['normal', i.t('layerNormal'), null],
-    ['recent', i.t('layerRecent'), p.recentSpan ?? i.t('notPublished')],
+    ['recent', i.t('layerRecent'), p.recentSpan === null ? i.t('notPublished') : p.recentSpan ?? null],
     ['none', i.t('layerNone'), null],
   ]
   const sub = 'text-[13px] text-ink-3'

@@ -1,7 +1,7 @@
 // English and Brazilian Portuguese for the whole interface. English is the default (what the judges see); the choice
 // is kept in localStorage and can be forced with ?lang=pt or ?lang=en. Each entry is [English, Portuguese]; {name}
 // marks a value filled in by `t`.
-import { createContext, useContext, useMemo } from 'react'
+import { createContext, useContext } from 'react'
 
 export type Lang = 'en' | 'pt'
 
@@ -14,6 +14,11 @@ const D = {
   language: ['Language', 'Idioma'],
   toLight: ['Switch to light theme', 'Mudar para o tema claro'],
   toDark: ['Switch to dark theme', 'Mudar para o tema escuro'],
+  partFailed: ['This part of the page could not load. A new version may have been published.', 'Esta parte da página não carregou. Uma nova versão pode ter sido publicada.'],
+  reload: ['Reload the page', 'Recarregar a página'],
+  theme: ['Theme', 'Tema'],
+  themeDark: ['Dark', 'Escuro'],
+  themeLight: ['Light', 'Claro'],
   code: ['Code', 'Código'],
   codeSr: [' on GitHub (opens in a new tab)', ' no GitHub (abre em nova aba)'],
   backToMap: ['Back to the map', 'Voltar ao mapa'],
@@ -387,6 +392,8 @@ const D = {
 } as const
 
 export type Key = keyof typeof D
+/** every string, [English, Portuguese], for the tests */
+export const DICTIONARY: Record<Key, readonly [string, string]> = D
 type Vars = Record<string, string | number>
 
 const fill = (s: string, v?: Vars) => (v ? s.replace(/\{(\w+)\}/g, (_, k: string) => (k in v ? String(v[k]) : `{${k}}`)) : s)
@@ -396,7 +403,13 @@ const MONTHS = {
   pt: { long: ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'], short: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'] },
 }
 
+// One set of formatters per language: every component asks for them, and Intl formatters are slow to build.
+const made: Partial<Record<Lang, ReturnType<typeof build>>> = {}
 export function makeI18n(lang: Lang) {
+  return (made[lang] ??= build(lang))
+}
+
+function build(lang: Lang) {
   const i = lang === 'pt' ? 1 : 0
   const locale = lang === 'pt' ? 'pt-BR' : 'en-US'
   const int = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 })
@@ -441,8 +454,7 @@ export type I18n = ReturnType<typeof makeI18n>
 
 export const LangContext = createContext<Lang>('en')
 export function useI18n(): I18n {
-  const lang = useContext(LangContext)
-  return useMemo(() => makeI18n(lang), [lang])
+  return makeI18n(useContext(LangContext))
 }
 
 const LANG_KEY = 'jangada-lang'

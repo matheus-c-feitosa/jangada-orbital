@@ -90,11 +90,11 @@ test('the Method page shows the yearly totals chart and its table', async ({ pag
 test('drawing a rectangle on the map loads that area', async ({ page }) => {
   await page.goto('./')
   await expect(page.getByRole('button', { name: 'Download CSV' })).toBeEnabled({ timeout: 30_000 })
-  // The design's map needs no outside host (the basemap is opt-in), so drawing is ready once the canvas is.
+  // The design's map needs no outside host (the basemap is opt-in); the drawing tools load once the map is idle.
   await expect(page.locator('.maplibregl-canvas')).toBeVisible()
-  await page.waitForTimeout(1_500)
   await page.getByRole('combobox', { name: 'Area' }).selectOption('drawn')
   await page.getByRole('button', { name: 'Rectangle' }).click()
+  await expect(page.locator('[data-drawing-ready]')).toBeAttached({ timeout: 15_000 })
   const box = (await page.locator('.maplibregl-canvas').boundingBox())!
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
@@ -104,6 +104,79 @@ test('drawing a rectangle on the map loads that area', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: /^Drawn area/ })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText(/grid cells/)).toBeVisible({ timeout: 30_000 })
   await expect(page.getByRole('table', { name: /Fire detections per month/ })).toBeVisible()
+})
+
+test('coming back from the Method page keeps the same map and the open tab', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible({ timeout: 30_000 })
+  await page.getByRole('tab', { name: 'Season' }).click()
+  await page.locator('.maplibregl-canvas').evaluate((c) => { (c as HTMLCanvasElement & { mark?: number }).mark = 42 })
+  await page.getByRole('link', { name: 'Method', exact: true }).click()
+  await expect(page.locator('.maplibregl-canvas')).toBeHidden()
+  await page.getByRole('link', { name: 'Calendar', exact: true }).click()
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible()
+  expect(await page.locator('.maplibregl-canvas').evaluate((c) => (c as HTMLCanvasElement & { mark?: number }).mark)).toBe(42)
+  await expect(page.getByRole('tab', { name: 'Season' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('.maplibregl-canvas')).toHaveCount(1)
+})
+
+test('drawing a polygon on the map loads that area', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.getByRole('button', { name: 'Download CSV' })).toBeEnabled({ timeout: 30_000 })
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible()
+  await page.getByRole('combobox', { name: 'Area' }).selectOption('drawn')
+  await page.getByRole('button', { name: 'Polygon' }).click()
+  await expect(page.locator('[data-drawing-ready]')).toBeAttached({ timeout: 15_000 })
+  const box = (await page.locator('.maplibregl-canvas').boundingBox())!
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+  // three corners, then a click on the first one closes the polygon
+  for (const [dx, dy] of [[-40, -30], [40, -30], [0, 40]]) await page.mouse.click(cx + dx, cy + dy)
+  await page.mouse.click(cx - 40, cy - 30)
+  await expect(page.getByRole('heading', { level: 1, name: /^Drawn area/ })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/grid cells/)).toBeVisible({ timeout: 30_000 })
+})
+
+test('the calendar is used with the keyboard alone', async ({ page }) => {
+  await page.goto('./')
+  const calendar = page.getByRole('table', { name: /Fire detections per month/ })
+  await expect(calendar).toBeVisible({ timeout: 30_000 })
+  // one tab stop: the selected month (the partial last month)
+  const first = calendar.locator('button[tabindex="0"]')
+  await expect(first).toHaveCount(1)
+  await first.focus()
+  await page.keyboard.press('Home')
+  await expect(page.locator(':focus')).toHaveAttribute('aria-label', /^Jan \d{4}:/)
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowRight')
+  await expect(page.locator(':focus')).toHaveAttribute('aria-label', /^Feb \d{4}:/)
+  await page.keyboard.press('End')
+  await expect(page.locator(':focus')).toHaveAttribute('aria-label', /^Dec \d{4}:/)
+  // the readout follows the focused month
+  const label = await page.locator(':focus').getAttribute('aria-label')
+  await expect(page.locator('p[aria-live="polite"]').first()).toContainText(label!.slice(0, 8))
+  await expect(calendar.locator('button[tabindex="0"]')).toHaveCount(1)
+})
+
+test('on a phone, the theme switches from the area sheet', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Map layers' }).click({ timeout: 30_000 })
+  const sheet = page.getByRole('dialog', { name: 'Area and layers' })
+  await sheet.getByRole('button', { name: 'Light' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect(sheet.getByRole('button', { name: 'Light' })).toHaveAttribute('aria-pressed', 'true')
+  await sheet.getByRole('button', { name: 'Dark' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+})
+
+test('on a phone, a municipality is found without typing its accents', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Map layers' }).click({ timeout: 30_000 })
+  await page.getByRole('dialog', { name: 'Area and layers' }).getByRole('radio', { name: 'Municipality' }).click({ timeout: 30_000 })
+  await page.getByRole('searchbox').fill('sao paulo')
+  await expect(page.getByRole('button', { name: /^São Paulo, SP/ }).first()).toBeVisible()
 })
 
 test('on a phone, the area sheet picks a state and shows it on the map', async ({ page }) => {
@@ -119,6 +192,18 @@ test('on a phone, the area sheet picks a state and shows it on the map', async (
   await expect(states).toBeHidden()
   await expect(page.getByRole('heading', { level: 1, name: 'Ceará' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+})
+
+test('on a phone, the observed values name their satellite', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Map layers' }).click({ timeout: 30_000 })
+  const sheet = page.getByRole('dialog', { name: 'Area and layers' })
+  await sheet.getByRole('button', { name: 'Observed' }).click()
+  await sheet.getByRole('combobox', { name: 'Satellite' }).selectOption('NOAA-20')
+  await expect(sheet.getByRole('combobox', { name: 'Satellite' })).toHaveValue('NOAA-20')
+  await sheet.getByRole('button', { name: 'Harmonized' }).click()
+  await expect(sheet.getByRole('combobox', { name: 'Satellite' })).toBeHidden()
 })
 
 test('on a phone, a biome is picked from its own list', async ({ page }) => {
@@ -139,6 +224,7 @@ test('on a phone, the orange box is dragged by a corner and taken as the area', 
   await page.getByRole('button', { name: 'Map layers' }).click()
   await page.getByRole('dialog', { name: 'Area and layers' }).getByRole('radio', { name: 'Draw an area on the map' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'Drag the corners of the orange box' })).toBeVisible()
+  await expect(page.locator('[data-drawing-ready]')).toBeAttached({ timeout: 15_000 })
   // the box spans 30%–70% of the visible map; drag its lower-right corner further out
   const box = (await page.locator('.maplibregl-canvas').boundingBox())!
   const top = 80, bottom = box.height - 96 - 16

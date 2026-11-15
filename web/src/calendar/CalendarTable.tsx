@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { memo, useCallback, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { classBreaks, classOf, compareMonth, daysIn, type MonthComparison } from './stats'
 import type { OniPhase } from '../data/extras'
 import { useI18n, type I18n, type Key } from '../i18n'
@@ -43,6 +43,38 @@ interface Cell {
   future: boolean
 }
 
+interface CellProps {
+  c: Cell
+  active: boolean
+  label: string
+  partial: boolean
+  cellH: string
+  onActivate: (month: string, fromHover: boolean, hasValue: boolean) => void
+  onMove: (e: KeyboardEvent, month: string) => void
+  register: (month: string, el: HTMLButtonElement | null) => void
+}
+
+/** One month. Memoized: moving the pointer across the grid re-renders the two cells whose `active` changes, not all
+ * 312 with their labels. */
+const CalendarCell = memo(function CalendarCell({ c, active, label, partial, cellH, onActivate, onMove, register }: CellProps) {
+  return (
+    <td className="p-0">
+      <button
+        type="button"
+        ref={(el) => register(c.month, el)}
+        className={`cell relative block w-full cursor-pointer rounded-[3px] border-0 p-0 ${cellH} hover:shadow-[0_0_0_2px_var(--ink-3)] data-[active=true]:outline-2 data-[active=true]:outline-offset-1 data-[active=true]:outline-ink ${c.cls < 0 ? 'cursor-default bg-transparent shadow-[inset_0_0_0_1px_var(--line)]' : BG[c.cls]}${partial ? ' cell-partial' : ''}${c.unusual ? ' cell-unusual' : ''}`}
+        tabIndex={active ? 0 : -1}
+        aria-label={label}
+        data-active={active}
+        onFocus={() => onActivate(c.month, false, c.value !== null)}
+        onMouseEnter={() => onActivate(c.month, true, c.value !== null)}
+        onClick={() => onActivate(c.month, false, c.value !== null)}
+        onKeyDown={(e) => onMove(e, c.month)}
+      />
+    </td>
+  )
+})
+
 /** Year × month table of the design's "Calendar" tab. One tab stop; arrow keys move between cells (roving tabindex). */
 export function CalendarTable({ months, values, harmonized, source, fromYear, toYear, partialMonth, partialDays, caption, oni, climateAvailable, climate, onClimate, compact }: Props) {
   const i = useI18n()
@@ -76,10 +108,18 @@ export function CalendarTable({ months, values, harmonized, source, fromYear, to
     return { grid, breaks }
   }, [months, values, numeric, harmonized, source, fromYear, toYear, partialMonth, partialDays])
 
-  const flat = grid.flat()
+  const flat = useMemo(() => grid.flat(), [grid])
   const activeCell = flat.find((c) => c.month === active && c.value !== null) ?? flat.filter((c) => c.value !== null).pop() ?? flat[0]
 
-  const move = (e: KeyboardEvent, month: string) => {
+  // stable handlers, so the memoized cells skip re-rendering
+  const onActivate = useCallback((month: string, fromHover: boolean, hasValue: boolean) => {
+    if (!fromHover || hasValue) setActive(month)
+  }, [])
+  const register = useCallback((month: string, el: HTMLButtonElement | null) => {
+    if (el) buttons.current.set(month, el)
+    else buttons.current.delete(month)
+  }, [])
+  const move = useCallback((e: KeyboardEvent, month: string) => {
     const [y, m] = month.split('-').map(Number)
     let ny = y
     let nm = m
@@ -96,7 +136,7 @@ export function CalendarTable({ months, values, harmonized, source, fromYear, to
     const key = `${ny}-${String(nm).padStart(2, '0')}`
     setActive(key)
     buttons.current.get(key)?.focus()
-  }
+  }, [fromYear, toYear])
 
   const label = (c: Cell) => {
     const [y, m] = c.month.split('-').map(Number)
@@ -108,6 +148,9 @@ export function CalendarTable({ months, values, harmonized, source, fromYear, to
     if (harmonized && c.source !== null) parts.push(i.t(SOURCE_KEY[c.source]))
     return parts.join(', ')
   }
+  // the screen-reader label of every cell, once per grid and language (not on every pointer move);
+  // label() reads only i, partialMonth, partialDays and harmonized
+  const labels = useMemo(() => new Map(flat.map((c) => [c.month, label(c)])), [flat, i, partialMonth, partialDays, harmonized])
 
   // The readout of the design: the selected month in a sentence, with how it compares with the usual month.
   const readout = (c: Cell) => {
@@ -180,20 +223,8 @@ export function CalendarTable({ months, values, harmonized, source, fromYear, to
                     </span>
                   </th>
                   {row.map((c) => (
-                    <td key={c.month} className="p-0">
-                      <button
-                        type="button"
-                        ref={(el) => { if (el) buttons.current.set(c.month, el); else buttons.current.delete(c.month) }}
-                        className={`cell relative block w-full cursor-pointer rounded-[3px] border-0 p-0 ${cellH} hover:shadow-[0_0_0_2px_var(--ink-3)] data-[active=true]:outline-2 data-[active=true]:outline-offset-1 data-[active=true]:outline-ink ${c.cls < 0 ? 'cursor-default bg-transparent shadow-[inset_0_0_0_1px_var(--line)]' : BG[c.cls]}${c.month === partialMonth ? ' cell-partial' : ''}${c.unusual ? ' cell-unusual' : ''}`}
-                        tabIndex={c.month === activeCell.month ? 0 : -1}
-                        aria-label={label(c)}
-                        data-active={c.month === activeCell.month}
-                        onFocus={() => setActive(c.month)}
-                        onMouseEnter={() => c.value !== null && setActive(c.month)}
-                        onClick={() => setActive(c.month)}
-                        onKeyDown={(e) => move(e, c.month)}
-                      />
-                    </td>
+                    <CalendarCell key={c.month} c={c} active={c.month === activeCell.month} label={labels.get(c.month) ?? ''}
+                      partial={c.month === partialMonth} cellH={cellH} onActivate={onActivate} onMove={move} register={register} />
                   ))}
                 </tr>
               )

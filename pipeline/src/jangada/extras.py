@@ -164,7 +164,7 @@ def biomes(con) -> None:
         g = json.loads(geo)
         features.append({"type": "Feature", "properties": {"id": bid, "name": bname, "bbox": [round(x, 3) for x in bbox],
                                                            "area_km2": round(km2, 1)},
-                         "geometry": {"type": g["type"], "coordinates": _round(g["coordinates"])}})
+                         "geometry": round_geometry(g)})
     write_json("biomes.geojson", {"type": "FeatureCollection", "features": features})
 
     # monthly series per biome, in the shape of series.json areas
@@ -204,10 +204,33 @@ def biomes(con) -> None:
     log(f"biomes: sum {total:,.0f} vs Brazil {brazil:,.0f} ({100 * (total / brazil - 1):+.3f}%)")
 
 
-def _round(coords):
-    if isinstance(coords[0], (int, float)):
-        return [round(coords[0], 4), round(coords[1], 4)]
-    return [_round(c) for c in coords]
+OUTLINE_DECIMALS = 3      # ~110 m, well below the SIMPLIFY_BIOMES tolerance; 4 decimals cost 20% more on the first screen
+
+
+def round_geometry(g: dict, nd: int = OUTLINE_DECIMALS) -> dict:
+    """A Polygon or MultiPolygon with coordinates rounded to `nd` decimals. A point that rounds onto the previous one
+    is dropped, and so is a hole (or a part) that rounds to fewer than four points. Neighbouring biomes share their
+    border vertices, and equal inputs round to equal outputs, so the shared borders stay shared (the map draws them
+    dashed, see web/src/geo/edges.ts)."""
+    def ring(r):
+        out = []
+        for x, y in r:
+            q = [round(x, nd), round(y, nd)]
+            if not out or out[-1] != q:
+                out.append(q)
+        return out
+
+    def polygon(rings):
+        rs = [ring(r) for r in rings]
+        if len(rs[0]) < 4:
+            return None
+        return [rs[0]] + [r for r in rs[1:] if len(r) >= 4]
+
+    if g["type"] == "Polygon":
+        p = polygon(g["coordinates"])
+        return {"type": "Polygon", "coordinates": p} if p else g
+    parts = [p for p in (polygon(q) for q in g["coordinates"]) if p]
+    return {"type": "MultiPolygon", "coordinates": parts} if parts else g
 
 
 # ---------------------------------------------------------------- recurrence

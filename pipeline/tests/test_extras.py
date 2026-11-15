@@ -6,7 +6,7 @@ import duckdb
 import pytest
 
 from jangada.export_web import WEB_DATA
-from jangada.extras import _b36, encode_rows, oni_phases, usual_p90_sql, ytd_standing
+from jangada.extras import _b36, encode_rows, oni_phases, round_geometry, usual_p90_sql, ytd_standing
 
 
 def test_usual_p90_counts_years_without_fire_as_zero():
@@ -43,6 +43,37 @@ def test_base36_and_row_encoding_round_trip():
     assert int(_b36(33554431), 36) == 33554431
     rows = [(-100, -400, 5), (-100, -399, 31), (-100, -395, 0), (-99, -500, 1)]
     assert encode_rows(rows) == {"-100": "-400.5,1.v,4.0", "-99": "-500.1"}
+
+
+def test_outlines_round_to_three_decimals_and_keep_shared_borders():
+    left = {"type": "Polygon", "coordinates": [[[0, 0], [1.00049, 0], [1.0004, 0.5], [1.00049, 1], [0, 1], [0, 0]]]}
+    right = {"type": "Polygon", "coordinates": [[[1.00049, 0], [2, 0], [2, 1], [1.00049, 1], [1.0004, 0.5], [1.00049, 0]],
+                                                [[1.5, 0.5], [1.5001, 0.5], [1.5, 0.5001], [1.5, 0.5]]]}
+    a, b = round_geometry(left), round_geometry(right)
+    # the shared border rounds the same way in both polygons, and a point that lands on its neighbour is dropped
+    assert a["coordinates"] == [[[0, 0], [1.0, 0], [1.0, 0.5], [1.0, 1], [0, 1], [0, 0]]]
+    assert b["coordinates"] == [[[1.0, 0], [2, 0], [2, 1], [1.0, 1], [1.0, 0.5], [1.0, 0]]]  # the tiny hole is gone
+    multi = round_geometry({"type": "MultiPolygon", "coordinates": [left["coordinates"], [[[5, 5], [5.0001, 5], [5, 5.0001], [5, 5]]]]})
+    assert multi["coordinates"] == [a["coordinates"]]
+
+
+def test_published_biome_outlines_are_light():
+    path = WEB_DATA / "biomes.geojson"
+    if not path.exists():
+        pytest.skip("biomes.geojson not published")
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    coords = []
+
+    def walk(c):
+        if isinstance(c[0], (int, float)):
+            coords.append(c)
+        else:
+            for x in c:
+                walk(x)
+    for f in doc["features"]:
+        walk(f["geometry"]["coordinates"])
+    assert all(round(x, 3) == x and round(y, 3) == y for x, y in coords)
+    assert path.stat().st_size < 470_000  # 500 KB with 4 decimals
 
 
 def _series(per_month, current, first=2001, last=2010, year=2011):
