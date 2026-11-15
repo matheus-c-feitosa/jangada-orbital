@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { loadAppData, type AppData, type AreaSeries, type Satellite } from './data/load'
 import { seriesForRing } from './data/queries'
+import { loadBiomes, loadIntensity, loadMuniRanking, loadOni, loadRecent, loadRecurrence, muniRing,
+  type BiomeData, type Intensity, type MuniRanking, type Oni, type Recent, type Recurrence } from './data/extras'
 import { buildCsv, csvFileName, downloadText } from './data/csv'
 import { ringBounds, type Ring } from './geo/aoi'
 import { compareMonth } from './calendar/stats'
@@ -74,12 +76,31 @@ export function App() {
   const [fromYear, setFromYear] = useState(2001)
   const [toYear, setToYear] = useState<number | null>(null)
   const [drawMode, setDrawMode] = useState<DrawMode>('none')
+  const [biomes, setBiomes] = useState<BiomeData | null>(null)
+  const [biomeBorders, setBiomeBorders] = useState(false)
+  const [recurrence, setRecurrence] = useState<Recurrence | null>(null)
+  const [period, setPeriod] = useState<[number, number]>([2016, 2025])
+  const [recent, setRecent] = useState<Recent | null>(null)
+  const [munis, setMunis] = useState<MuniRanking | null>(null)
+  const [oni, setOni] = useState<Oni | null>(null)
+  const [intensity, setIntensity] = useState<Intensity | null>(null)
 
   const load = useCallback(() => {
     setLoadError(null)
     loadAppData().then(setData).catch((e: Error) => setLoadError(e.message))
   }, [])
   useEffect(load, [load])
+
+  // spec 002 extras: optional files, loaded once the main data is in (a missing file just hides its view)
+  useEffect(() => {
+    if (!data) return
+    loadBiomes().then(setBiomes)
+    loadRecurrence().then((r) => { setRecurrence(r); if (r) setPeriod([Math.max(r.first, r.last - 9), r.last]) })
+    loadRecent().then(setRecent)
+    loadMuniRanking().then(setMunis)
+    loadOni().then(setOni)
+    loadIntensity().then(setIntensity)
+  }, [data])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -102,6 +123,7 @@ export function App() {
   const series: AreaSeries | null = !data ? null
     : area.kind === 'country' ? data.areas.BR
     : area.kind === 'state' ? data.areas[area.uf]
+    : area.kind === 'biome' ? biomes?.areas[area.id] ?? null
     : ringSeries
 
   const lastYear = data ? Number(data.manifest.last_month.slice(0, 4)) : 2026
@@ -131,14 +153,24 @@ export function App() {
   const areaName = !data ? 'Brazil'
     : area.kind === 'country' ? 'Brazil'
     : area.kind === 'state' ? `${data.areas[area.uf].name}, Brazil`
+    : area.kind === 'biome' ? `${biomes?.areas[area.id]?.name ?? 'Biome'} (biome)`
     : area.label
 
   const areaBounds = useMemo((): [number, number, number, number] | null => {
     if (!data) return null
     if (area.kind === 'state') return data.stateList.find((s) => s.uf === area.uf)?.bbox ?? null
     if (area.kind === 'ring') return ringBounds(area.ring)
+    if (area.kind === 'biome') return biomes?.list.find((b) => b.id === area.id)?.bbox ?? null
     return null
-  }, [data, area])
+  }, [data, area, biomes])
+
+  /** series for a ranking or comparison key: a state code, or "bio:<id>" for a biome */
+  const seriesFor = useCallback((key: string): AreaSeries | null => {
+    if (key.startsWith('bio:')) return biomes?.areas[key.slice(4)] ?? null
+    return data?.areas[key] ?? null
+  }, [data, biomes])
+  // key of the selected area in intensity.json and in the ranking (null for drawn areas and municipalities)
+  const areaKey = area.kind === 'country' ? 'BR' : area.kind === 'state' ? area.uf : area.kind === 'biome' ? area.id : null
 
   // Choosing an area closes the filters on tablets and phones, so the answer comes straight into view.
   const chooseArea = useCallback((next: Area) => {
@@ -147,6 +179,19 @@ export function App() {
   }, [])
   const pickState = useCallback((uf: string) => {
     setArea({ kind: 'state', uf })
+    setFiltersOpen(false)
+    setDrawerOpen(false)
+  }, [])
+  const pickBiome = useCallback((id: string) => {
+    setArea({ kind: 'biome', id })
+    setFiltersOpen(false)
+    setDrawerOpen(false)
+  }, [])
+  const pickMuni = useCallback((id: string, uf: string, name: string) => {
+    muniRing(id, uf).then((ring) => {
+      if (ring) setArea({ kind: 'ring', ring, label: `${name}, ${uf}` })
+      else setAreaError(`Could not load the outline of ${name}.`)
+    })
     setFiltersOpen(false)
     setDrawerOpen(false)
   }, [])
@@ -182,6 +227,9 @@ export function App() {
 
   const filters = data && (
     <AreaPanel data={data} area={area} onArea={chooseArea} drawMode={drawMode} onDrawMode={startDraw} layer={layer} onLayer={setLayer}
+      biomes={biomes?.list ?? []} biomeBorders={biomeBorders} onBiomeBorders={setBiomeBorders}
+      recurrenceYears={recurrence ? [recurrence.first, recurrence.last] : null} period={period} onPeriod={setPeriod}
+      recentSpan={recent ? `${recent.from} to ${recent.to}` : null}
       view={view} onView={setView} sat={sat} onSat={setSat}
       years={years} fromYear={fromYear} toYear={endYear} onRange={(f, t) => { setFromYear(f); setToYear(t) }}
       canDownload={!!series && !areaLoading} onDownload={download} />
@@ -190,7 +238,9 @@ export function App() {
   const map = data && (
     <MapView key={theme} theme={theme} states={data.states} stateCode={area.kind === 'state' ? area.uf : null}
       ring={area.kind === 'ring' ? area.ring : null} bounds={areaBounds} drawMode={drawMode} onDrawn={onDrawn}
-      layer={layer} standings={standings} dateLabel={dateLabel} onPickState={pickState} compact={phone} className="h-full" />
+      layer={layer} standings={standings} dateLabel={dateLabel} onPickState={pickState} compact={phone} className="h-full"
+      biomes={biomes?.outlines ?? null} biomeId={area.kind === 'biome' ? area.id : null} biomeBorders={biomeBorders || area.kind === 'biome'}
+      recurrence={recurrence} period={period} recent={recent} />
   )
 
   // shown in every layout: without them a failed or empty drawn area reads as "loading" or "no fires, as usual"
@@ -220,7 +270,10 @@ export function App() {
   const dataPanel = data && (
     <DataPanel data={data} series={series} loading={areaLoading} areaName={series?.name ?? areaName} selectedUf={area.kind === 'state' ? area.uf : null}
       view={view} sat={sat} fromYear={fromYear} toYear={endYear} partialMonth={partialMonth} partialDays={partialDays}
-      tab={tab} onTab={setTab} compare={compare} onToggleCompare={toggleCompare} onSelectState={pickState} narrow={phone} />
+      tab={tab} onTab={setTab} compare={compare} onToggleCompare={toggleCompare} onSelectState={pickState} narrow={phone}
+      biomes={biomes} munis={munis} onSelectBiome={pickBiome} onSelectMuni={pickMuni} seriesFor={seriesFor}
+      selectedKey={area.kind === 'state' ? area.uf : area.kind === 'biome' ? `bio:${area.id}` : null}
+      oni={oni} intensity={intensity} areaKey={areaKey} />
   )
 
   const filtersSheet = (

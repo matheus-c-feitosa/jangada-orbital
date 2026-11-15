@@ -1,6 +1,7 @@
 import type { AreaSeries, Manifest } from './data/load'
 import { Explainer } from './pages/Explainer'
 import { SensorTimeline, ViirsAgreement } from './pages/MethodCharts'
+import { OverpassChart, ValidationChart } from './pages/MethodData'
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
 
@@ -18,6 +19,7 @@ export function Method({ manifest, repo, brazil }: { manifest: Manifest | null; 
       <Explainer brazil={brazil} manifest={manifest} />
       <SensorTimeline dataDate={manifest?.data_date ?? '2026-11-14'} />
       <ViirsAgreement brazil={brazil} />
+      <OverpassChart />
       <h2>Steps</h2>
       <ol>
         <li>NASA FIRMS hotspots for Brazil, November 2000 to {manifest?.data_date ?? 'today'}: vegetation fires only, low-confidence detections removed.</li>
@@ -36,6 +38,7 @@ export function Method({ manifest, repo, brazil }: { manifest: Manifest | null; 
           <tr><td>State, per month</td><td>{v ? pct(v.share_within_20pct) : '…'} of state-months (mean error {v ? pct(v.mape_state) : '…'})</td></tr>
         </tbody>
       </table>
+      <ValidationChart />
       <h2>Other views</h2>
       <ul>
         <li><strong>This year so far:</strong> cumulative harmonized detections since January against the median and the
@@ -61,7 +64,9 @@ export function Method({ manifest, repo, brazil }: { manifest: Manifest | null; 
       <h2>Sources</h2>
       <ul>
         <li>NASA FIRMS, Fire Information for Resource Management System: MODIS Collection 6.1 and VIIRS 375 m active fire data.</li>
-        <li>IBGE: official borders of Brazil and its states.</li>
+        <li>IBGE: official borders of Brazil, its states and municipalities, and the biomes map (1:250,000, 2019).</li>
+        <li>NOAA Climate Prediction Center: Oceanic Niño Index (ONI), for the El Niño / La Niña marks.</li>
+        <li>NASA FIRMS near-real-time files (last 7 days) for the map layer of recent detections.</li>
         <li>Basemap: © OpenStreetMap contributors, OpenMapTiles, OpenFreeMap.</li>
       </ul>
       <p>Full method, code and data pipeline: <a href={`${repo}/blob/main/docs/METHOD.md`} target="_blank" rel="noreferrer">docs/METHOD.md on GitHub</a>.</p>
