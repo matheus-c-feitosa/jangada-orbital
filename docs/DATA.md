@@ -116,6 +116,13 @@ Brazil, all years and sensors, is about 3 GB of CSV. The pipeline handles one fi
 2. keep only the columns we use, as Parquet;
 3. delete the CSV.
 
+## Spec 002 sources (no key needed, cached in `data/raw/extras/`)
+
+- IBGE biomes 1:250,000: `https://geoftp.ibge.gov.br/informacoes_ambientais/estudos_ambientais/biomas/vetores/Biomas_250mil.zip`
+- NOAA CPC Oceanic Niño Index: `https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt`
+- FIRMS last 7 days, South America (MODIS C6.1, VIIRS S-NPP, NOAA-20, NOAA-21):
+  `https://firms.modaps.eosdis.nasa.gov/data/active_fire/<product>/csv/<file>_South_America_7d.csv`
+
 ## Citations
 
 TODO: copy the exact citation and DOI for each product from the FIRMS "citing FIRMS data" guidance before submission.

@@ -18,6 +18,8 @@ interface Props {
   partialMonth: string
   partialDays: number
   caption: string
+  /** El Niño / La Niña phase per year (NOAA ONI), shown when climate context is on */
+  oni?: Record<string, { phase: 'EN' | 'LN' | null }> | null
 }
 
 interface Cell {
@@ -29,7 +31,7 @@ interface Cell {
 }
 
 /** Year × month table. One tab stop; arrow keys move between cells (roving tabindex). */
-export function CalendarTable({ months, values, source, fromYear, toYear, partialMonth, partialDays, caption }: Props) {
+export function CalendarTable({ months, values, source, fromYear, toYear, partialMonth, partialDays, caption, oni }: Props) {
   const [active, setActive] = useState<string>(partialMonth)
   const buttons = useRef(new Map<string, HTMLButtonElement>())
 
@@ -119,7 +121,13 @@ export function CalendarTable({ months, values, source, fromYear, toYear, partia
               const estimated = row.some((c) => c.source !== null && c.source > 0)
               return (
                 <tr key={year}>
-                  <th scope="row" className="whitespace-nowrap px-1.5 text-right font-medium text-ink-3">{year}{estimated && <small className="ml-1 font-normal max-sm:ml-0 max-sm:block max-sm:leading-none">est.</small>}</th>
+                  <th scope="row" className="whitespace-nowrap px-1.5 text-right font-medium text-ink-3">{year}{estimated && <small className="ml-1 font-normal max-sm:ml-0 max-sm:block max-sm:leading-none">est.</small>}
+                    {oni?.[year]?.phase && (
+                      <span className={`ml-1 inline-block rounded px-1 text-[10px] font-semibold leading-[14px] ${oni[year].phase === 'EN' ? 'bg-[var(--div6)] text-[#1a0d03]' : 'bg-[var(--div0)] text-[#0b1220]'}`}
+                        title={oni[year].phase === 'EN' ? 'El Niño year' : 'La Niña year'}>
+                        {oni[year].phase}<span className="sr-only">{oni[year].phase === 'EN' ? ', El Niño year' : ', La Niña year'}</span>
+                      </span>
+                    )}</th>
                   {row.map((c) => (
                     <td key={c.month} className="p-0">
                       <button
@@ -151,6 +159,7 @@ export function CalendarTable({ months, values, source, fromYear, toYear, partia
         {source && <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-unusual" /> Unusual: above the 90th percentile of past years</span>}
         <span className="inline-flex items-center gap-1.5"><span className="cell-partial inline-block h-3 w-[22px] rounded-sm bg-c3" /> Partial month</span>
         {source && <span className="inline-flex items-center gap-1.5">est. = year includes estimates (Terra 2000–02, VIIRS from 2024)</span>}
+        {oni && <span className="inline-flex items-center gap-1.5">EN El Niño, LN La Niña year (NOAA Oceanic Niño Index)</span>}
       </div>
     </div>
   )

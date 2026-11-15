@@ -23,21 +23,23 @@ interface Props {
   series: AreaSeries
   areaName: string
   compare: string[]
-  onRemove: (uf: string) => void
+  onRemove: (key: string) => void
+  /** series of a compared key (state code or "bio:<id>") */
+  seriesFor: (key: string) => AreaSeries | null
 }
 
 /** Cumulative detections per 1,000 km² this year for the selected area and up to three compared states. */
-export function CompareChart({ data, series, areaName, compare, onRemove }: Props) {
+export function CompareChart({ data, series, areaName, compare, onRemove, seriesFor }: Props) {
   const { manifest } = data
   const lastMonth = manifest.last_month.slice(0, 7)
   const lines = useMemo(() => {
     // a compared state that is also the selected area is drawn once, as the selected area
-    const others = compare.filter((c) => data.areas[c] && data.areas[c] !== series)
-    const list = [{ code: '', name: areaName, s: series }, ...others.map((c) => ({ code: c, name: data.areas[c].name, s: data.areas[c] }))]
+    const others = compare.map((c) => ({ code: c, s: seriesFor(c) })).filter((o) => o.s && o.s !== series) as { code: string; s: AreaSeries }[]
+    const list = [{ code: '', name: areaName, s: series }, ...others.map((o) => ({ code: o.code, name: o.s.name, s: o.s }))]
     return list
       .filter((l) => l.s.area_km2)
       .map((l) => ({ ...l, points: cumulativeDensity(l.s.months, l.s.value, l.s.area_km2 as number, lastMonth, manifest.last_month_days) }))
-  }, [data, series, areaName, compare, lastMonth, manifest.last_month_days])
+  }, [series, areaName, compare, seriesFor, lastMonth, manifest.last_month_days])
   if (!compare.length || lines.length < 2) return null
 
   const last = (l: (typeof lines)[number]) => l.points[l.points.length - 1]?.value ?? 0

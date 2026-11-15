@@ -153,3 +153,53 @@ test('on a phone, the data drawer opens the calendar and every tab fits the widt
   await page.getByRole('button', { name: 'Back to the map' }).click()
   await expect(page.getByRole('button', { name: 'Fire calendar' })).toBeVisible()
 })
+
+test('a biome is an area and the new map layers show their legends', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('combobox', { name: 'Area' }).click({ timeout: 30_000 })
+  await page.getByRole('option', { name: 'Pantanal' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Pantanal (biome)' })).toBeVisible()
+  await expect(page.getByRole('table', { name: /Fire detections per month/ })).toBeVisible()
+  await page.getByRole('radio', { name: /Fire recurrence/ }).check()
+  await expect(page.getByLabel('Map legend')).toContainText(/Years with fire, \d{4}–\d{4}/)
+  await page.getByRole('radio', { name: /Detections, last 7 days/ }).check()
+  await expect(page.getByLabel('Map legend')).toContainText('Detections, last 7 days')
+})
+
+test('biomes and municipalities can be ranked, and a municipality loads as an area', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('tab', { name: 'Ranking' }).click()
+  await page.getByRole('group', { name: 'Rank' }).getByRole('button', { name: 'Biomes' }).click()
+  await expect(page.getByRole('table', { name: /^Biomes by/ }).getByRole('row')).toHaveCount(7, { timeout: 30_000 })
+  await page.getByRole('group', { name: 'Rank' }).getByRole('button', { name: 'Municipalities' }).click()
+  const first = page.getByRole('table', { name: /^Municipalities by/ }).getByRole('button', { name: /^Select / }).first()
+  const name = (await first.getAttribute('aria-label'))!.replace(/^Select /, '').replace(/ as the area$/, '')
+  await first.click()
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible({ timeout: 30_000 })
+})
+
+test('municipalities with fewer than 20 detections do not lead the density ranking', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('tab', { name: 'Ranking' }).click()
+  await page.getByRole('group', { name: 'Rank' }).getByRole('button', { name: 'Municipalities' }).click({ timeout: 30_000 })
+  await page.getByRole('group', { name: 'Sort by' }).getByRole('button', { name: 'Per 1,000 km²' }).click()
+  const first = page.getByRole('table', { name: /^Municipalities by/ }).getByRole('row').nth(1)
+  const soFar = Number((await first.innerText()).match(/([\d,]+) so far/)![1].replaceAll(',', ''))
+  expect(soFar).toBeGreaterThanOrEqual(20)
+  await expect(page.getByText(/Fewer than 20 detections so far is a small sample/)).toBeVisible()
+})
+
+test('climate context marks El Niño and La Niña years, and the Season tab shows fire intensity', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('checkbox', { name: /Climate context/ }).check({ timeout: 30_000 })
+  await expect(page.getByRole('rowheader', { name: /^2015.*El Niño year/ })).toBeVisible()
+  await page.getByRole('tab', { name: 'Season' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Fire intensity and night fires' })).toBeVisible()
+})
+
+test('the Method page shows the overpass drift and the validation scatter', async ({ page }) => {
+  await page.goto('./#method')
+  await expect(page.getByRole('heading', { level: 2, name: 'Aqua and Terra drifted off their usual hour' })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('img', { name: /Predicted against observed Aqua detections/ })).toBeVisible()
+  await expect(page.getByRole('img', { name: /Monthly ratio of NOAA-20/ })).toBeVisible()
+})

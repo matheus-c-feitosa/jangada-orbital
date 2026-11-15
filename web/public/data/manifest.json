@@ -31,6 +31,51 @@
       "path": "states.geojson",
       "bytes": 187400,
       "sha256": "0ad8a6f8ac83c22dbe848241eef6367a3315a8d38f79c94f3419d8c97dbb09e7"
+    },
+    "oni": {
+      "path": "oni.json",
+      "bytes": 3243,
+      "sha256": "e57a409e73eef376cbae63930f3ebf1f1de56f25b07a487709de45b72c286b30"
+    },
+    "recurrence": {
+      "path": "recurrence.json",
+      "bytes": 440311,
+      "sha256": "684988365a838c73edb232d18a1aef27ed9109eb6b24d1ec0da27e823de13463"
+    },
+    "biomes": {
+      "path": "biomes.geojson",
+      "bytes": 500340,
+      "sha256": "9bca35c52661319308215dfab22e415a713cc6b51f461db8295129c229fd99e7"
+    },
+    "biome_series": {
+      "path": "biome_series.json",
+      "bytes": 91218,
+      "sha256": "248f996bf13f1f805101244e555f16e44e40142d0f3e9086a9a074e3e07715bc"
+    },
+    "municipalities_ranking": {
+      "path": "municipalities/ranking.json",
+      "bytes": 240902,
+      "sha256": "7c73c8998f74e2f330a12f7f19da5fd1c489d7699cfeb273df631057dc646886"
+    },
+    "validation": {
+      "path": "validation.json",
+      "bytes": 2113,
+      "sha256": "8517f4280cdc07b229ea4542ffa772b394749cd4fb8953258051bf991b6ca588"
+    },
+    "overpass": {
+      "path": "overpass.json",
+      "bytes": 2819,
+      "sha256": "46baf7e3618b29c78913c264922473e53b371a8260ca8274de3d5054525ab8fd"
+    },
+    "recent": {
+      "path": "recent.json",
+      "bytes": 288820,
+      "sha256": "6d0ec50ee846a49df7c946e12cbf6ec6301bbb8edf4d762a52d6a600b97ea35f"
+    },
+    "intensity": {
+      "path": "intensity.json",
+      "bytes": 31564,
+      "sha256": "6dc690895f79ba5408b7550d959435421efbb6ae418fa74d5ad24c3d7fee3fce"
     }
   },
   "tiles": {

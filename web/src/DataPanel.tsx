@@ -1,5 +1,7 @@
-import { useRef, type KeyboardEvent } from 'react'
+import { useRef, useState, type KeyboardEvent } from 'react'
 import type { AppData, AreaSeries, Satellite } from './data/load'
+import type { BiomeData, Intensity, MuniRanking, Oni } from './data/extras'
+import { IntensityChart } from './calendar/IntensityChart'
 import { CalendarTable } from './calendar/CalendarTable'
 import { AnnualChart } from './calendar/AnnualChart'
 import { YearToDate } from './calendar/YearToDate'
@@ -31,6 +33,17 @@ interface Props {
   onSelectState: (uf: string) => void
   /** phone: shorter tab labels */
   narrow?: boolean
+  biomes: BiomeData | null
+  munis: MuniRanking | null
+  onSelectBiome: (id: string) => void
+  onSelectMuni: (id: string, uf: string, name: string) => void
+  seriesFor: (key: string) => AreaSeries | null
+  /** ranking key of the selected area (state code or "bio:<id>") */
+  selectedKey: string | null
+  oni: Oni | null
+  intensity: Intensity | null
+  /** key of the area in intensity.json (null for drawn areas and municipalities) */
+  areaKey: string | null
 }
 
 /** The data column: four views of the selected area as tabs (new UI, spec 002). */
@@ -52,6 +65,7 @@ export function DataPanel(p: Props) {
     p.onTab(next)
     refs.current.get(next)?.focus()
   }
+  const [climate, setClimate] = useState(false)
   const s = p.series
   const values = !s ? [] : p.view === 'harmonized' ? s.value : s.observed[p.sat]
 
@@ -68,12 +82,20 @@ export function DataPanel(p: Props) {
       </div>
       <div role="tabpanel" id={`panel-${p.tab}`} aria-labelledby={`tab-${p.tab}`} className="min-w-0 pt-4 [&>section:first-child]:mt-0">
         {p.tab === 'ranking' ? (
-          <RankingTable data={p.data} selected={p.selectedUf} compare={p.compare} onSelect={p.onSelectState} onToggleCompare={p.onToggleCompare} />
+          <RankingTable data={p.data} biomes={p.biomes} munis={p.munis} selected={p.selectedKey} compare={p.compare} onSelect={p.onSelectState}
+            onSelectBiome={p.onSelectBiome} onSelectMuni={p.onSelectMuni} onToggleCompare={p.onToggleCompare} />
         ) : !s || p.loading ? (
           <p className="py-6 text-sm text-ink-2" aria-busy="true">Loading fire history…</p>
         ) : p.tab === 'calendar' ? (
           <>
+            {p.oni && (
+              <label className="mb-2 flex min-h-11 w-fit cursor-pointer items-center gap-2.5 text-sm text-ink-2">
+                <input type="checkbox" className="size-5 accent-[var(--brand)]" checked={climate} onChange={(e) => setClimate(e.target.checked)} />
+                Climate context (El Niño / La Niña)
+              </label>
+            )}
             <CalendarTable
+              oni={climate ? p.oni?.years ?? null : null}
               months={s.months}
               values={values}
               source={p.view === 'harmonized' ? s.source : null}
@@ -91,15 +113,18 @@ export function DataPanel(p: Props) {
         ) : p.tab === 'year' ? (
           <>
             <YearToDate months={s.months} values={s.value} lastMonth={p.partialMonth} days={p.partialDays} />
-            <CompareChart data={p.data} series={s} areaName={p.areaName} compare={p.compare} onRemove={p.onToggleCompare} />
+            <CompareChart data={p.data} series={s} areaName={p.areaName} compare={p.compare} onRemove={p.onToggleCompare} seriesFor={p.seriesFor} />
             {!p.compare.length && (
               <p className="mt-4 text-sm text-ink-2">
-                To compare with other states, tick them in the <button type="button" className="font-semibold text-ink underline underline-offset-[3px]" onClick={() => p.onTab('ranking')}>Ranking</button> tab.
+                To compare with states or biomes, tick them in the <button type="button" className="font-semibold text-ink underline underline-offset-[3px]" onClick={() => p.onTab('ranking')}>Ranking</button> tab.
               </p>
             )}
           </>
         ) : (
-          <SeasonRhythm months={s.months} values={s.value} fromYear={p.fromYear} toYear={p.toYear} />
+          <>
+            <SeasonRhythm months={s.months} values={s.value} fromYear={p.fromYear} toYear={p.toYear} />
+            {p.intensity && p.areaKey && <IntensityChart intensity={p.intensity} areaKey={p.areaKey} areaName={p.areaName} />}
+          </>
         )}
       </div>
     </div>
