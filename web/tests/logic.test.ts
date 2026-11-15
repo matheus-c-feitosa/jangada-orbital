@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { cellKey, cellsInRing, circleRing, pointInRing, type Ring } from '../src/geo/aoi'
+import { cellAreaKm2, cellCentre, cellKey, cellOfKey, cellsInRing, circleRing, pointInRing, type Ring } from '../src/geo/aoi'
 import { classBreaks, classOf, compareMonth, daysIn } from '../src/calendar/stats'
 import { buildCsv } from '../src/data/csv'
 import type { AreaSeries, Manifest } from '../src/data/load'
@@ -20,8 +20,24 @@ describe('area of interest', () => {
     expect(box).toEqual({ latMin: -40, latMax: -37, lonMin: -385, lonMax: -382 })
   })
 
-  test('tiny area with no cell centre inside yields no cells', () => {
-    expect(cellsInRing([[-38.51, -3.99], [-38.505, -3.99], [-38.505, -3.985]]).cells.size).toBe(0)
+  test('tiny area with no cell centre inside falls back to the one cell around it, flagged approximate', () => {
+    const tiny: Ring = [[-38.51, -3.99], [-38.505, -3.99], [-38.505, -3.985]]
+    const { cells, box, approximate } = cellsInRing(tiny)
+    expect(approximate).toBe(true)
+    expect([...cells]).toEqual([cellKey(-40, -386)]) // the cell holding (-38.507, -3.988)
+    expect(box).toEqual({ latMin: -40, latMax: -40, lonMin: -386, lonMax: -386 })
+    expect(cellsInRing(square).approximate).toBe(false)
+  })
+
+  test('cell keys decode back, also for negative cells', () => {
+    expect(cellOfKey(cellKey(-40, -386))).toEqual([-40, -386])
+    expect(cellOfKey(cellKey(5, 12))).toEqual([5, 12])
+    expect(cellCentre(-40, -386)).toEqual([-38.55, -3.95])
+  })
+
+  test('a cell is about 120 km² near the equator and shrinks toward the poles', () => {
+    expect(cellAreaKm2(0)).toBeCloseTo(123.6, 0)
+    expect(cellAreaKm2(-300)).toBeLessThan(cellAreaKm2(0))
   })
 
   test('circle radius is respected', () => {

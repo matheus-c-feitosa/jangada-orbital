@@ -43,7 +43,11 @@ export function csvFileName(manifest: Manifest, areaLabel: string): string {
 }
 
 export function downloadText(text: string, fileName: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }))
+  downloadBlob(new Blob([text], { type: 'text/csv;charset=utf-8' }), fileName)
+}
+
+export function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = fileName

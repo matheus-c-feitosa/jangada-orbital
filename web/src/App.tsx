@@ -2,10 +2,11 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useSt
 import { ChevronLeft, ChevronRight, Download, Globe, Moon, SlidersHorizontal, Sun, X } from 'lucide-react'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { loadAppData, type AppData, type AreaSeries, type Satellite } from './data/load'
-import { seriesForRing } from './data/queries'
-import { loadBiomes, loadIntensity, loadMuniRanking, loadOni, loadRecent, loadRecurrence, muniRing } from './data/extras'
+import { seriesForRing, type RingSeries } from './data/queries'
+import { anyCellInBrazil, outlinesOf } from './geo/coverage'
+import { loadBiomes, loadIntensity, loadMuniNames, loadMuniRanking, loadOni, loadRecent, loadRecurrence, muniRing } from './data/extras'
 import { buildCsv, csvFileName, downloadText } from './data/csv'
-import { ringBounds, type Ring } from './geo/aoi'
+import { cellsInRing, ringBounds, type Ring } from './geo/aoi'
 import type { DrawMode, MapLayer, StateStanding, Theme } from './map/MapView'
 import { AreaPanel, type Area, type View } from './AreaPanel'
 import { DataPanel, TabList, tabLabels, type Tab } from './DataPanel'
@@ -138,7 +139,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   const [layer, setLayer] = useState<MapLayer>('recurrence')
   const [compare, setCompare] = useState<string[]>([])
   const [area, setArea] = useState<Area>({ kind: 'country' })
-  const [ringSeries, setRingSeries] = useState<(AreaSeries & { cells: number }) | null>(null)
+  const [ringSeries, setRingSeries] = useState<RingSeries | null>(null)
   const [areaLoading, setAreaLoading] = useState(false)
   const [areaError, setAreaError] = useState<string | null>(null)
   const [view, setView] = useState<View>('harmonized')
@@ -166,7 +167,9 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   const recurrence = useExtra(loadRecurrence, !!data, layer === 'recurrence', true)
   const recent = useExtra(loadRecent, !!data, layer === 'recent')
   const firstScreen = biomes !== undefined && (layer !== 'recurrence' || recurrence !== undefined)
-  const munis = useExtra(loadMuniRanking, !!data && firstScreen, tab === 'ranking', true)
+  const munis = useExtra(loadMuniRanking, !!data && firstScreen, tab === 'ranking')
+  // the names of all 5,570 municipalities, for the search (the ranking leaves out some of them)
+  const muniNames = useExtra(loadMuniNames, !!data && firstScreen, false, true)
   const intensity = useExtra(loadIntensity, !!data && firstScreen, tab === 'season', true)
   useEffect(() => {
     if (recurrence) setPeriod([Math.max(recurrence.first, recurrence.last - 9), recurrence.last])
@@ -227,7 +230,13 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
     return i.t('coords', { s: s.toFixed(2), w: w.toFixed(2), n: n.toFixed(2), e: e.toFixed(2) })
   })()
   const km2 = series?.area_km2 ?? biomeInfo?.area_km2
-  const empty = area.kind === 'ring' && ringSeries?.cells === 0
+  // "No data here" only for an area with no detections at all whose cells all lie outside Brazil (sea, other
+  // countries); a quiet area inside Brazil reads as a quiet area
+  const outlines = useMemo(() => (data ? outlinesOf(data.states) : []), [data])
+  const empty = useMemo(() => {
+    if (area.kind !== 'ring' || !ringSeries || ringSeries.value.some((v) => v > 0)) return false
+    return !anyCellInBrazil(cellsInRing(area.ring).cells, outlines)
+  }, [area, ringSeries, outlines])
 
   const areaBounds = useMemo((): [number, number, number, number] | null => {
     if (!data) return null
@@ -319,12 +328,13 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
       {areaError && <p className="m-0 text-[13px] text-unusual" role="alert">
         {areaError.startsWith('muni:') ? i.t('muniLoadError', { name: areaError.slice(5) }) : i.t('areaLoadError', { msg: areaError })}</p>}
       {empty && <p className="m-0 text-[13px] text-ink-3" role="status">{i.t('emptyArea')}</p>}
+      {area.kind === 'ring' && ringSeries?.approximate && !empty && <p className="m-0 text-[13px] text-ink-3" role="status">{i.t('approxArea')}</p>}
     </>
   )
 
   const filterProps = data && {
     data, area, onArea: chooseArea, drawMode, onDrawMode: startDraw, layer, onLayer: setLayer,
-    biomes: biomes?.list ?? [], munis: munis ?? null, onPickMuni: pickMuni,
+    biomes: biomes?.list ?? [], munis: muniNames ?? null, onPickMuni: pickMuni,
     biomeBorders, onBiomeBorders: setBiomeBorders, stateBorders, onStateBorders: setStateBorders, places, onPlaces: setPlaces,
     recurrenceYears: recurrence ? [recurrence.first, recurrence.last] as [number, number] : recurrence, period, onPeriod: setPeriod,
     recentSpan: recent ? i.t('dateRange', { a: recent.from, b: recent.to }) : recent,
@@ -414,7 +424,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
           )}
         </section>
         {!dataCollapsed && (
-          <aside className="flex min-h-0 flex-col border-l border-line bg-surface" aria-label={i.t('dataRegion')}>
+          <aside id="data" tabIndex={-1} className="flex min-h-0 flex-col border-l border-line bg-surface outline-none" aria-label={i.t('dataRegion')}>
             <div className="flex flex-none flex-col gap-3 px-[22px] pt-5">
               <div className="flex items-start gap-3">
                 <div className="flex grow flex-col gap-0.5">
@@ -454,7 +464,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
             </div>
           )}
         </section>
-        <section className="grid grid-cols-[260px_minmax(0,1fr)] gap-6 border-t border-line bg-surface px-6 pt-5 pb-8 max-[719px]:grid-cols-1" aria-label={i.t('dataRegion')}>
+        <section id="data" tabIndex={-1} className="grid grid-cols-[260px_minmax(0,1fr)] gap-6 border-t border-line bg-surface px-6 pt-5 pb-8 outline-none max-[719px]:grid-cols-1" aria-label={i.t('dataRegion')}>
           <div className="flex flex-col gap-3 self-start min-[720px]:sticky min-[720px]:top-4">
             <div className="flex flex-col gap-1">
               <h1 className="m-0 text-xl font-semibold">{areaName}</h1>
@@ -500,7 +510,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
         canDownload={filterProps.canDownload} onDownload={download}
         drawMode={drawMode} onDrawMode={startDraw} onConfirmBox={() => setConfirmBox((n) => n + 1)}
         biomes={biomes?.list ?? []} standings={standings} biomeStandings={biomeStandings}
-        munis={munis ?? null} layer={layer} onLayer={setLayer} recurrenceYears={filterProps.recurrenceYears} period={period} onPeriod={setPeriod}
+        munis={muniNames ?? null} layer={layer} onLayer={setLayer} recurrenceYears={filterProps.recurrenceYears} period={period} onPeriod={setPeriod}
         recentSpan={filterProps.recentSpan} values={view} onValues={setView} sat={sat} onSat={setSat} biomeBorders={biomeBorders} onBiomeBorders={setBiomeBorders}
         stateBorders={stateBorders} onStateBorders={setStateBorders} places={places} onPlaces={setPlaces} lang={lang} onLang={onLang}
         theme={theme} onTheme={setTheme} />
@@ -535,6 +545,13 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
     ) : null
   ) : (
     <header className="flex h-14 flex-none items-center gap-4 border-b border-line bg-surface px-5 max-[1100px]:h-16 max-[1100px]:gap-3 max-[1100px]:pr-4 max-[1100px]:pl-6">
+      {/* keyboard users skip the header and the filters; shown when focused */}
+      {page === 'calendar' && data && (
+        <a href="#data" className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-brand focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-[#1A0C02]"
+          onClick={(e) => { e.preventDefault(); document.getElementById('data')?.focus() }}>
+          {i.t('skipToData')}
+        </a>
+      )}
       <a href="#" className="flex min-h-11 items-center gap-2.5 text-ink no-underline">
         <Logo />
         <span className="flex flex-col leading-[1.15]">

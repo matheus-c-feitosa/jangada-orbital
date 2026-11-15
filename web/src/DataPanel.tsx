@@ -3,6 +3,7 @@ import type { AppData, AreaSeries, Satellite } from './data/load'
 import type { BiomeData, Intensity, MuniRanking, Oni } from './data/extras'
 import { IntensityChart } from './calendar/IntensityChart'
 import { CalendarTable } from './calendar/CalendarTable'
+import { Highlights } from './calendar/Highlights'
 import { AnnualChart } from './calendar/AnnualChart'
 import { YearToDate } from './calendar/YearToDate'
 import { SeasonRhythm } from './calendar/SeasonRhythm'
@@ -113,6 +114,13 @@ export function DataPanel(p: Props & { hideTabs?: boolean }) {
               values={values}
               harmonized={p.view === 'harmonized'}
               source={s.source}
+              lo={s.lo}
+              hi={s.hi}
+              image={{
+                title: p.areaName,
+                lines: [i.t('imageLine', { a: p.fromYear, b: p.toYear, date: i.day(p.data.manifest.data_date) })],
+                footer: [i.t('imageSource'), 'https://matheus-c-feitosa.github.io/jangada-orbital/'],
+              }}
               fromYear={p.fromYear}
               toYear={p.toYear}
               partialMonth={p.partialMonth}
@@ -120,6 +128,7 @@ export function DataPanel(p: Props & { hideTabs?: boolean }) {
               compact={p.narrow}
               caption={p.view === 'harmonized' ? i.t('captionHarm') : i.t('captionObs', { sat: p.sat })}
             />
+            <Highlights months={s.months} values={values} fromYear={p.fromYear} toYear={p.toYear} partialMonth={p.partialMonth} />
             <AnnualChart series={s} areaName={p.areaName} view={p.view} partialMonth={p.partialMonth} dataDate={p.dateLabel}
               fromYear={p.fromYear} toYear={p.toYear} />
           </>

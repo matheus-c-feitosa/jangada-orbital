@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Layers, Moon, SlidersHorizontal, Sun } from 'lucide-react'
 import { SATELLITES, type AppData, type Satellite } from './data/load'
-import type { BiomeInfo, MuniRanking } from './data/extras'
+import type { BiomeInfo, MuniNames } from './data/extras'
 import type { DrawMode, MapLayer, StateStanding, Theme } from './map/MapView'
 import { CircleForm, SAT_LABEL, fold, kindOf, useMuniIndex, type Area, type View } from './AreaPanel'
 import { Logo, StatusPill, km2Text, statusOf } from './AreaHeader'
@@ -37,7 +37,8 @@ interface Props {
   biomes: BiomeInfo[]
   standings: Record<string, StateStanding>
   biomeStandings: Record<string, StateStanding>
-  munis: MuniRanking | null
+  /** every municipality, for the search */
+  munis: MuniNames | null
   layer: MapLayer
   onLayer: (l: MapLayer) => void
   /** undefined while the file loads, null when it is not published */

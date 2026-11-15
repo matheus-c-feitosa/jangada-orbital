@@ -2,19 +2,58 @@
 
 NASA Space Apps Challenge 2026 · Challenge: **Harmonization of MODIS and VIIRS Hot Spots** · Local Event: Fortaleza, Brazil
 
-> Status: built during the hackathon, November 14–15, 2026. Work in progress.
+**Live app: https://matheus-c-feitosa.github.io/jangada-orbital/**
 
-## What we are building
+The app is a static site: it needs no login and no server.
+
+> Built during the hackathon, November 14–15, 2026.
+
+## What it does
 
 Satellites have counted active fire hotspots since 2000, but the record is split between two sensor families that
 cannot be compared directly: MODIS (Terra and Aqua, 1 km, since 2000) and VIIRS (375 m; Suomi NPP from 2012,
-NOAA-20 from 2018, NOAA-21 from 2023). We are building:
+NOAA-20 from 2018, NOAA-21 from 2023).
 
-1. **Harmonization**: one consistent monthly hotspot series in which the sensor of origin no longer matters.
-2. **A web app**: choose an area (draw it or type latitude/longitude) and a date range, then see the burning activity
-   calendar (month × year), the current month against the historical median, anomalies, and download a CSV.
+Jangada Orbital harmonizes both families into one monthly series in Aqua-MODIS-equivalent detections, for Brazil
+from November 2000 to today:
+- Terra is converted until July 2002.
+- Aqua is observed from 2002 to 2023.
+- From 2024, VIIRS is calibrated per state and month of the year.
+- Estimated months carry their likely range.
 
-First scope: Brazil, from 2000 to today.
+The web app turns that series into a burning activity calendar.
+
+**Areas.** Choose any of these:
+- Brazil, one of the 27 states or the 6 IBGE biomes;
+- any of 5,570 municipalities, found by name;
+- a rectangle or polygon drawn on the map;
+- a point and a radius.
+
+**Calendar.** It shows:
+- each month × year, with months above the 90th percentile of past years flagged;
+- the current month compared pro rata with the usual pace;
+- the busiest year, the highest month and the months that usually burn most;
+- optional El Niño / La Niña years.
+
+**Other views.**
+- Yearly totals, with conversion ranges.
+- This year so far against the normal band.
+- When the fire season starts and peaks, and how intense it is (fire radiative power, share of night detections).
+- A ranking of states, biomes and municipalities, with a side-by-side comparison.
+
+**Map.**
+- How many years each 0.1° cell burned.
+- This year against normal, by state or biome.
+- Near-real-time detections of the last 7 days.
+
+**Downloads.** The monthly series as CSV, and the calendar as a PNG image.
+
+**Method page.**
+- Which satellite counts each year.
+- How closely the VIIRS satellites agree.
+- A held-out validation, with the error measured by the size of the month.
+
+**Interface.** English or Portuguese, dark or light theme, on desktop, tablet and phone.
 
 ## Repository layout
 

@@ -109,6 +109,13 @@ export interface MuniRanking {
 }
 export const loadMuniRanking = () => optional<MuniRanking>('municipalities/ranking.json')
 
+/** [IBGE id, name, uf] of every municipality (5,570), for the search; the ranking leaves out some of them */
+export type MuniNames = [string, string, string][]
+export async function loadMuniNames(): Promise<MuniNames | null> {
+  const rows = await optional<[string, string, string, ...number[]][]>('municipalities/index.json')
+  return rows ? rows.map((r) => [r[0], r[1], r[2]]) : null
+}
+
 /** Outline of one municipality (largest polygon's outer ring), from the state file published by T041. */
 export async function muniRing(id: string, uf: string): Promise<[number, number][] | null> {
   const fc = await optional<GeoJSON.FeatureCollection>(`municipalities/${uf}.geojson`)

@@ -135,6 +135,8 @@ export function ValidationChart() {
           <tr><td>{i.t('stateMonth')}</td><td>{i.pct(m.mape_state_month)}</td><td>{i.pct(m.share_within_20pct_state_month)}</td></tr>
         </tbody>
       </table>
+      {/* `uv run jangada-strata`, docs/METHOD.md "The error depends on the size of the month" */}
+      <p className="text-sm">{i.t('bySize')}</p>
       <details className="text-sm">
         <summary className="cursor-pointer text-ink-2">{i.t('showTestMonths')}</summary>
         <div className="overflow-x-auto">

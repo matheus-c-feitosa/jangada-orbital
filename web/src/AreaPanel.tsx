@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Crosshair, Download, Pentagon, RectangleHorizontal } from 'lucide-react'
 import { SATELLITES, type AppData, type Satellite } from './data/load'
 import { circleRing, type Ring } from './geo/aoi'
-import type { BiomeInfo, MuniRanking } from './data/extras'
+import type { BiomeInfo, MuniNames } from './data/extras'
 import type { DrawMode, MapLayer } from './map/MapView'
 import { useI18n, type Key } from './i18n'
 
@@ -41,10 +41,10 @@ const PT_ORDER = new Intl.Collator('pt-BR')
 export const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('pt-BR')
 
 /** Municipality search: "Iguatu, CE" → its row, for an <input list> with a datalist. */
-export function useMuniIndex(munis: MuniRanking | null) {
+export function useMuniIndex(munis: MuniNames | null) {
   return useMemo(() => {
     const byLabel = new Map<string, [string, string, string]>()
-    for (const [id, name, uf] of munis?.rows ?? []) byLabel.set(`${name}, ${uf}`, [id, uf, name])
+    for (const [id, name, uf] of munis ?? []) byLabel.set(`${name}, ${uf}`, [id, uf, name])
     const labels = [...byLabel.keys()].sort(PT_ORDER.compare)
     // folded once, for the phone search that filters on every key press
     const folded = labels.map(fold)
@@ -91,7 +91,8 @@ interface Props {
   onLayer: (layer: MapLayer) => void
   /** IBGE biomes, once biomes.geojson has loaded */
   biomes: BiomeInfo[]
-  munis: MuniRanking | null
+  /** every municipality, for the search (municipalities/index.json) */
+  munis: MuniNames | null
   onPickMuni: (id: string, uf: string, name: string) => void
   biomeBorders: boolean
   onBiomeBorders: (on: boolean) => void
