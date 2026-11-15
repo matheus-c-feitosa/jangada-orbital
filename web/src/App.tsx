@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarDays, ChevronDown, ExternalLink, Moon, SlidersHorizontal, Sun } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ChevronLeft, ChevronRight, Download, Globe, Moon, SlidersHorizontal, Sun, X } from 'lucide-react'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { loadAppData, type AppData, type AreaSeries, type Satellite } from './data/load'
 import { seriesForRing } from './data/queries'
@@ -8,24 +7,26 @@ import { loadBiomes, loadIntensity, loadMuniRanking, loadOni, loadRecent, loadRe
   type BiomeData, type Intensity, type MuniRanking, type Oni, type Recent, type Recurrence } from './data/extras'
 import { buildCsv, csvFileName, downloadText } from './data/csv'
 import { ringBounds, type Ring } from './geo/aoi'
-import { compareMonth } from './calendar/stats'
-import { AnswerLine } from './calendar/AnswerLine'
 import { MapView, type DrawMode, type MapLayer, type StateStanding, type Theme } from './map/MapView'
 import { AreaPanel, type Area, type View } from './AreaPanel'
-import { DataPanel, type Tab } from './DataPanel'
+import { DataPanel, TabList, tabLabels, type Tab } from './DataPanel'
+import { PhoneLayout, SHEET_HEIGHT, type SheetView } from './PhoneLayout'
+import { BIOME_STATES, Logo, StatusPill, densityText, km2Text, percentileText, summaryText, yearStatus } from './AreaHeader'
 import { MAX_COMPARE } from './rank/RankingTable'
 import { ytdStanding } from './rank/ranking'
 import { Method } from './Method'
+import { LangContext, initialLang, makeI18n, saveLang, type Lang } from './i18n'
 
 const REPO = 'https://github.com/matheus-c-feitosa/jangada-orbital'
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+/** The design is dark; a light theme chosen with the toggle is kept. A new key: the old "theme" key stored the
+ * device preference on the first visit, not a choice. */
+const THEME_KEY = 'jangada-theme'
 function initialTheme(): Theme {
   try {
-    const saved = localStorage.getItem('theme')
-    if (saved === 'dark' || saved === 'light') return saved
-  } catch { /* storage blocked: fall back to the device preference */ }
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+    if (localStorage.getItem(THEME_KEY) === 'light') return 'light'
+  } catch { /* storage blocked: the design's dark theme */ }
+  return 'dark'
 }
 
 function useMediaQuery(query: string): boolean {
@@ -39,33 +40,67 @@ function useMediaQuery(query: string): boolean {
   return matches
 }
 
-function usePage(): ['calendar' | 'method', (p: 'calendar' | 'method') => void] {
-  // #why is the harmonization explainer inside the Method page (linked from the answer line)
+function useViewportHeight(): number {
+  const [h, setH] = useState(() => window.innerHeight)
+  useEffect(() => {
+    const onResize = () => setH(window.innerHeight)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return h
+}
+
+function usePage(): 'calendar' | 'method' {
+  // #why is the yearly-totals chart inside the Method page
   const read = () => (['#method', '#why'].includes(window.location.hash) ? 'method' : 'calendar')
   const [page, setPage] = useState<'calendar' | 'method'>(read)
   useEffect(() => {
-    const onHash = () => setPage(read())
+    const onHash = () => { setPage(read()); window.scrollTo(0, 0) }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
-  return [page, (p) => { window.location.hash = p === 'method' ? 'method' : '' }]
+  return page
 }
 
-const navLink = 'inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-sm text-ink-2 hover:bg-surface-2 hover:text-ink aria-[current=page]:bg-surface-2 aria-[current=page]:text-ink max-lg:px-2'
-const floating = 'shadow-[0_4px_12px_rgb(0_0_0/0.35)]'
+/** standings of this year so far, per key of `areas` */
+function standingsOf(areas: Record<string, AreaSeries>, keys: string[], lastMonth: string, days: number) {
+  const out: Record<string, StateStanding> = {}
+  for (const k of keys) {
+    const a = areas[k]
+    const st = a && ytdStanding(a.months, a.value, lastMonth, days)
+    if (st) out[k] = { name: a.name, ytd: st.current, percentile: st.percentile, first: st.first, last: st.last }
+  }
+  return out
+}
 
 export function App() {
+  const [lang, setLang] = useState<Lang>(initialLang)
+  useEffect(() => saveLang(lang), [lang])
+  return (
+    <LangContext.Provider value={lang}>
+      <Shell lang={lang} onLang={setLang} />
+    </LangContext.Provider>
+  )
+}
+
+function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
+  const i = useMemo(() => makeI18n(lang), [lang])
   const [data, setData] = useState<AppData | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [theme, setTheme] = useState<Theme>(initialTheme)
-  const [page, setPage] = usePage()
-  // Layouts of the new UI: three columns from 1024 px, map over data on tablets, map with a data drawer on phones.
-  const desktop = useMediaQuery('(min-width: 1024px)')
+  const page = usePage()
+  // Layouts of the design: three columns from 1100 px, map over data on tablets (600–1099 px), map with a sheet on phones.
+  const desktop = useMediaQuery('(min-width: 1100px)')
+  const wide = useMediaQuery('(min-width: 1280px)')
   const phone = useMediaQuery('(max-width: 599px)')
+  // narrow tablets: the language menu shows "EN" / "PT" so the header fits
+  const shortLang = useMediaQuery('(max-width: 759px)')
+  const viewportH = useViewportHeight()
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [sheet, setSheet] = useState<SheetView>('peek')
+  const [dataCollapsed, setDataCollapsed] = useState(false)
   const [tab, setTab] = useState<Tab>('calendar')
-  const [layer, setLayer] = useState<MapLayer>('normal')
+  const [layer, setLayer] = useState<MapLayer>('recurrence')
   const [compare, setCompare] = useState<string[]>([])
   const [area, setArea] = useState<Area>({ kind: 'country' })
   const [ringSeries, setRingSeries] = useState<(AreaSeries & { cells: number }) | null>(null)
@@ -76,8 +111,11 @@ export function App() {
   const [fromYear, setFromYear] = useState(2001)
   const [toYear, setToYear] = useState<number | null>(null)
   const [drawMode, setDrawMode] = useState<DrawMode>('none')
+  const [confirmBox, setConfirmBox] = useState(0)
   const [biomes, setBiomes] = useState<BiomeData | null>(null)
-  const [biomeBorders, setBiomeBorders] = useState(false)
+  const [biomeBorders, setBiomeBorders] = useState(true)
+  const [stateBorders, setStateBorders] = useState(false)
+  const [places, setPlaces] = useState(false)
   const [recurrence, setRecurrence] = useState<Recurrence | null>(null)
   const [period, setPeriod] = useState<[number, number]>([2016, 2025])
   const [recent, setRecent] = useState<Recent | null>(null)
@@ -104,10 +142,10 @@ export function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
-    try { localStorage.setItem('theme', theme) } catch { /* not persisted; still applied */ }
+    try { localStorage.setItem(THEME_KEY, theme) } catch { /* not persisted; still applied */ }
   }, [theme])
 
-  // Drawn or typed areas are read from the tile files; Brazil and states come from series.json.
+  // Drawn or typed areas are read from the tile files; Brazil, states and biomes come from the series files.
   useEffect(() => {
     if (!data || area.kind !== 'ring') { setRingSeries(null); return }
     let cancelled = false
@@ -115,7 +153,7 @@ export function App() {
     setAreaError(null)
     seriesForRing(area.ring, area.label, data.areas.BR, data.manifest)
       .then((s) => { if (!cancelled) setRingSeries(s) })
-      .catch((e: Error) => { if (!cancelled) setAreaError(`Could not load this area (${e.message}).`) })
+      .catch((e: Error) => { if (!cancelled) setAreaError(e.message) })
       .finally(() => { if (!cancelled) setAreaLoading(false) })
     return () => { cancelled = true }
   }, [data, area])
@@ -130,31 +168,33 @@ export function App() {
   const endYear = toYear ?? lastYear
   const partialMonth = data ? data.manifest.last_month.slice(0, 7) : ''
   const partialDays = data?.manifest.last_month_days ?? 0
-  const dateLabel = data ? `${Number(data.manifest.data_date.slice(8, 10))} ${MONTH_ABBR[Number(data.manifest.data_date.slice(5, 7)) - 1]}` : ''
+  const dateLabel = data ? i.day(data.manifest.data_date, false) : ''
+  const dataDate = data ? i.day(data.manifest.data_date) : ''
 
-  const comparison = useMemo(() => {
-    if (!series) return null
-    const t = series.months.indexOf(partialMonth)
-    return t < 0 ? null : compareMonth(series.months, series.value, t, partialDays)
-  }, [series, partialMonth, partialDays])
+  // This year against previous years for every state and biome: the map layer, its popover and the pickers.
+  const standings = useMemo(() => (data ? standingsOf(data.areas, data.stateList.map((s) => s.uf), partialMonth, partialDays) : {}), [data, partialMonth, partialDays])
+  const biomeStandings = useMemo(() => (biomes ? standingsOf(biomes.areas, Object.keys(biomes.areas), partialMonth, partialDays) : {}), [biomes, partialMonth, partialDays])
+  const status = useMemo(() => (areaLoading ? null : yearStatus(series, partialMonth, partialDays)), [series, areaLoading, partialMonth, partialDays])
 
-  // This year against previous years for every state: the map layer and its popover (spec 002, story 2).
-  const standings = useMemo(() => {
-    const out: Record<string, StateStanding> = {}
-    if (!data) return out
-    for (const s of data.stateList) {
-      const a = data.areas[s.uf]
-      const st = a && ytdStanding(a.months, a.value, partialMonth, partialDays)
-      if (st) out[s.uf] = { name: a.name, ytd: st.current, percentile: st.percentile, first: st.first, last: st.last }
-    }
-    return out
-  }, [data, partialMonth, partialDays])
-
-  const areaName = !data ? 'Brazil'
-    : area.kind === 'country' ? 'Brazil'
-    : area.kind === 'state' ? `${data.areas[area.uf].name}, Brazil`
-    : area.kind === 'biome' ? `${biomes?.areas[area.id]?.name ?? 'Biome'} (biome)`
+  const biomeInfo = area.kind === 'biome' ? biomes?.list.find((b) => b.id === area.id) : undefined
+  const areaName = !data ? i.t('kindBrazil')
+    : area.kind === 'country' ? i.t('kindBrazil')
+    : area.kind === 'state' ? data.areas[area.uf].name
+    : area.kind === 'biome' ? biomeInfo?.name ?? i.t('kindBiome')
+    : area.origin === 'draw' ? i.t('kindDrawn')
+    : area.origin === 'circle' && area.circle ? i.t('circleLabel', { km: area.circle.km, lat: area.circle.lat.toFixed(2), lon: area.circle.lon.toFixed(2) })
     : area.label
+  const kindLabel = (() => {
+    if (area.kind === 'country') return i.t('wholeCountry')
+    if (area.kind === 'state') return i.t('kindState')
+    if (area.kind === 'biome') return i.t('kindBiomeLimits')
+    if (area.origin === 'muni') return i.t('kindMuni')
+    if (area.origin === 'circle') return i.t('kindCircle')
+    const [w, s, e, n] = ringBounds(area.ring)
+    return i.t('coords', { s: s.toFixed(2), w: w.toFixed(2), n: n.toFixed(2), e: e.toFixed(2) })
+  })()
+  const km2 = series?.area_km2 ?? biomeInfo?.area_km2
+  const empty = area.kind === 'ring' && ringSeries?.cells === 0
 
   const areaBounds = useMemo((): [number, number, number, number] | null => {
     if (!data) return null
@@ -172,42 +212,43 @@ export function App() {
   // key of the selected area in intensity.json and in the ranking (null for drawn areas and municipalities)
   const areaKey = area.kind === 'country' ? 'BR' : area.kind === 'state' ? area.uf : area.kind === 'biome' ? area.id : null
 
-  // Choosing an area closes the filters on tablets and phones, so the answer comes straight into view.
+  // Choosing an area closes the tablet drawer, so the answer comes straight into view; phones keep their sheet.
   const chooseArea = useCallback((next: Area) => {
     setArea(next)
+    setAreaError(null)
     setFiltersOpen(false)
   }, [])
   const pickState = useCallback((uf: string) => {
     setArea({ kind: 'state', uf })
     setFiltersOpen(false)
-    setDrawerOpen(false)
+    setSheet('peek')
   }, [])
   const pickBiome = useCallback((id: string) => {
     setArea({ kind: 'biome', id })
     setFiltersOpen(false)
-    setDrawerOpen(false)
+    setSheet('peek')
   }, [])
   const pickMuni = useCallback((id: string, uf: string, name: string) => {
     muniRing(id, uf).then((ring) => {
-      if (ring) setArea({ kind: 'ring', ring, label: `${name}, ${uf}` })
-      else setAreaError(`Could not load the outline of ${name}.`)
+      if (ring) setArea({ kind: 'ring', ring, label: `${name}, ${uf}`, origin: 'muni' })
+      else setAreaError(`muni:${name}`)
     })
     setFiltersOpen(false)
-    setDrawerOpen(false)
+    setSheet('peek')
   }, [])
-  const toggleCompare = useCallback((uf: string) => {
-    setCompare((c) => (c.includes(uf) ? c.filter((x) => x !== uf) : c.length < MAX_COMPARE ? [...c, uf] : c))
+  const toggleCompare = useCallback((key: string) => {
+    setCompare((c) => (c.includes(key) ? c.filter((x) => x !== key) : c.length < MAX_COMPARE ? [...c, key] : c))
   }, [])
 
   const onDrawn = useCallback((ring: Ring) => {
     setDrawMode('none')
-    const [w, s, e, n] = ringBounds(ring)
-    setArea({ kind: 'ring', ring, label: `Drawn area (${s.toFixed(2)}°, ${w.toFixed(2)}° to ${n.toFixed(2)}°, ${e.toFixed(2)}°)` })
+    setSheet('peek')
+    setArea({ kind: 'ring', ring, label: 'Drawn area', origin: 'draw' })
   }, [])
-  // On tablets and phones the filters cover the map; close them while the user draws.
+  // On tablets the drawer covers the map; close it while the user draws.
   const startDraw = useCallback((mode: DrawMode) => {
     setDrawMode(mode)
-    if (mode !== 'none') { setFiltersOpen(false); setDrawerOpen(false) }
+    if (mode !== 'none') setFiltersOpen(false)
   }, [])
 
   const download = () => {
@@ -222,177 +263,249 @@ export function App() {
     downloadText(csv, csvFileName(data.manifest, areaName))
   }
 
-  const years = Array.from({ length: lastYear - 2001 + 1 }, (_, i) => 2001 + i)
-  const empty = area.kind === 'ring' && ringSeries?.cells === 0
+  const years = Array.from({ length: lastYear - 2001 + 1 }, (_, k) => 2001 + k)
 
-  const filters = data && (
-    <AreaPanel data={data} area={area} onArea={chooseArea} drawMode={drawMode} onDrawMode={startDraw} layer={layer} onLayer={setLayer}
-      biomes={biomes?.list ?? []} biomeBorders={biomeBorders} onBiomeBorders={setBiomeBorders}
-      recurrenceYears={recurrence ? [recurrence.first, recurrence.last] : null} period={period} onPeriod={setPeriod}
-      recentSpan={recent ? `${recent.from} to ${recent.to}` : null}
-      view={view} onView={setView} sat={sat} onSat={setSat}
-      years={years} fromYear={fromYear} toYear={endYear} onRange={(f, t) => { setFromYear(f); setToYear(t) }}
-      canDownload={!!series && !areaLoading} onDownload={download} />
-  )
-
-  const map = data && (
-    <MapView key={theme} theme={theme} states={data.states} stateCode={area.kind === 'state' ? area.uf : null}
-      ring={area.kind === 'ring' ? area.ring : null} bounds={areaBounds} drawMode={drawMode} onDrawn={onDrawn}
-      layer={layer} standings={standings} dateLabel={dateLabel} onPickState={pickState} compact={phone} className="h-full"
-      biomes={biomes?.outlines ?? null} biomeId={area.kind === 'biome' ? area.id : null} biomeBorders={biomeBorders || area.kind === 'biome'}
-      recurrence={recurrence} period={period} recent={recent} />
+  // "About this area" (desktop sidebar, tablet data column)
+  const km2s = km2 ? km2Text(km2, i) : ''
+  const biomeStates = area.kind === 'biome' ? BIOME_STATES[area.id] : undefined
+  const about: ReactNode = data && (
+    <>
+      <p className="m-0">
+        {area.kind === 'country' ? i.t('aboutBrazil', { km2: km2s, states: data.stateList.length, biomes: biomes?.list.length ?? 6 })
+          : area.kind === 'biome' && biomeStates ? (biomeStates.length > 1 ? i.t('aboutBiome', { km2: km2s, n: biomeStates.length, list: biomeStates.join(', ') }) : i.t('aboutBiome1', { km2: km2s, list: biomeStates[0] }))
+          : area.kind === 'ring' && ringSeries ? i.t('aboutRing', { km2: km2s, cells: i.int(ringSeries.cells) })
+          : km2 ? i.t('aboutPlain', { km2: km2s }) : ''}
+      </p>
+      {status && densityText(status, km2, i) && <p className="m-0">{densityText(status, km2, i)}</p>}
+    </>
   )
 
   // shown in every layout: without them a failed or empty drawn area reads as "loading" or "no fires, as usual"
   const notices = (
     <>
-      {areaError && <p className="text-[13px] text-unusual" role="alert">{areaError}</p>}
-      {empty && <p className="text-[13px] text-ink-3" role="status">This area has no grid cells inside Brazil. Draw inside Brazil or pick a state.</p>}
+      {areaError && <p className="m-0 text-[13px] text-unusual" role="alert">
+        {areaError.startsWith('muni:') ? i.t('muniLoadError', { name: areaError.slice(5) }) : i.t('areaLoadError', { msg: areaError })}</p>}
+      {empty && <p className="m-0 text-[13px] text-ink-3" role="status">{i.t('emptyArea')}</p>}
     </>
   )
 
-  const answer = data && (
-    <>
-      <AnswerLine areaName={areaName} comparison={comparison} loading={areaLoading || !series}
-        cells={area.kind === 'ring' ? ringSeries?.cells : undefined} lastDayPartial={data.manifest.last_day_partial} areaKm2={series?.area_km2} />
-      {notices}
-    </>
+  const filterProps = data && {
+    data, area, onArea: chooseArea, drawMode, onDrawMode: startDraw, layer, onLayer: setLayer,
+    biomes: biomes?.list ?? [], munis, onPickMuni: pickMuni,
+    biomeBorders, onBiomeBorders: setBiomeBorders, stateBorders, onStateBorders: setStateBorders, places, onPlaces: setPlaces,
+    recurrenceYears: recurrence ? [recurrence.first, recurrence.last] as [number, number] : null, period, onPeriod: setPeriod,
+    recentSpan: recent ? i.t('dateRange', { a: recent.from, b: recent.to }) : null,
+    view, onView: setView, sat, onSat: setSat,
+    years, fromYear, toYear: endYear, onRange: (f: number, t: number) => { setFromYear(f); setToYear(t) },
+    canDownload: !!series && !areaLoading, onDownload: download,
+  }
+
+  const drawing = drawMode !== 'none'
+  // the phone sheet peeks at 300 px, less on short screens so the map keeps some room
+  const peekHeight = Math.max(236, Math.min(300, Math.round(viewportH * 0.46)))
+  const phoneInset = !phone ? 0 : drawing ? parseInt(SHEET_HEIGHT.draw, 10) : sheet === 'peek' ? peekHeight : 96
+  const map = data && (
+    <MapView key={`${theme}-${places}`} theme={theme} places={places} states={data.states} stateCode={area.kind === 'state' ? area.uf : null}
+      ring={area.kind === 'ring' ? area.ring : null} bounds={areaBounds} drawMode={drawMode} onDrawn={onDrawn} confirmBox={confirmBox}
+      layer={layer} standings={standings} biomeStandings={biomeStandings} normalUnit={area.kind === 'biome' && biomes ? 'biome' : 'state'}
+      dateLabel={dateLabel} onPickState={pickState} onPickBiome={pickBiome} compact={phone} className="h-full"
+      biomes={biomes?.outlines ?? null} biomeId={area.kind === 'biome' ? area.id : null} biomeBorders={biomeBorders} stateBorders={stateBorders}
+      recurrence={recurrence} period={period} recent={recent} controls={!phone} touchControls={!desktop} onShowBrazil={() => chooseArea({ kind: 'country' })}
+      bottomInset={phoneInset} />
   )
 
-  // on tablets and phones the filters close while drawing, so the map carries the instructions and a way out
-  const drawHint = drawMode !== 'none' && (
-    <p role="status" className={`absolute inset-x-3 top-3 z-10 m-0 rounded-xl border border-brand bg-surface px-4 py-3 text-sm ${floating}`}>
-      {drawMode === 'rectangle' ? 'Tap two opposite corners on the map.' : 'Tap each corner; tap the first point to close.'}{' '}
-      <button type="button" className="font-semibold text-ink underline" onClick={() => setDrawMode('none')}>Cancel</button>
+  const panelProps = data && {
+    // states and biomes keep their names from the data; Brazil and drawn areas follow the language
+    data, series, loading: areaLoading, areaName: series?.name && (area.kind === 'state' || area.kind === 'biome') ? series.name : areaName,
+    view, sat, fromYear, toYear: endYear, partialMonth, partialDays, dateLabel,
+    tab, onTab: setTab, compare, onToggleCompare: toggleCompare, onSelectState: pickState, narrow: phone,
+    biomes, munis, onSelectBiome: pickBiome, onSelectMuni: pickMuni, seriesFor,
+    selectedKey: area.kind === 'state' ? area.uf : area.kind === 'biome' ? `bio:${area.id}` : null,
+    oni, intensity, areaKey,
+  }
+
+  const summary = status ? summaryText(status, dateLabel, i) : null
+  const drawHint = drawing && (
+    <p role="status" className="float absolute inset-x-3 top-3 z-10 m-0 rounded-xl border border-brand bg-surface px-4 py-3 text-sm">
+      {drawMode === 'rectangle' ? i.t('tapRect') : i.t('tapPoly')}{' '}
+      <button type="button" className="font-semibold text-link underline" onClick={() => setDrawMode('none')}>{i.t('cancel')}</button>
     </p>
   )
 
-  const dataPanel = data && (
-    <DataPanel data={data} series={series} loading={areaLoading} areaName={series?.name ?? areaName} selectedUf={area.kind === 'state' ? area.uf : null}
-      view={view} sat={sat} fromYear={fromYear} toYear={endYear} partialMonth={partialMonth} partialDays={partialDays}
-      tab={tab} onTab={setTab} compare={compare} onToggleCompare={toggleCompare} onSelectState={pickState} narrow={phone}
-      biomes={biomes} munis={munis} onSelectBiome={pickBiome} onSelectMuni={pickMuni} seriesFor={seriesFor}
-      selectedKey={area.kind === 'state' ? area.uf : area.kind === 'biome' ? `bio:${area.id}` : null}
-      oni={oni} intensity={intensity} areaKey={areaKey} />
-  )
-
-  const filtersSheet = (
-    <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
-      <SheetContent side={phone ? 'bottom' : 'left'}
-        className={phone ? 'h-[100dvh] max-h-[100dvh] overflow-y-auto rounded-none px-4 pb-6' : 'w-[380px] max-w-[90vw] overflow-y-auto px-4 pb-6 sm:max-w-[380px]'}>
-        <SheetHeader className="px-0">
-          <SheetTitle>Area and layers</SheetTitle>
-          <SheetDescription>Pick a state, draw an area or type a point and radius.</SheetDescription>
-        </SheetHeader>
-        {filters}
-      </SheetContent>
-    </Sheet>
-  )
-  const filtersButton = (
-    <Button variant="outline" className={`h-11 gap-2 bg-surface text-sm ${floating}`} onClick={() => setFiltersOpen(true)}>
-      <SlidersHorizontal aria-hidden="true" /> Area and layers
-    </Button>
-  )
-
-  let body
+  let body: ReactNode
   if (page === 'method') {
-    body = <Method manifest={data?.manifest ?? null} repo={REPO} brazil={data?.areas.BR ?? null} />
+    body = <Method manifest={data?.manifest ?? null} repo={REPO} brazil={data?.areas.BR ?? null} phone={phone} />
   } else if (loadError) {
     body = (
       <main className="p-6" role="alert">
-        <p className="text-ink-2">The fire data could not be loaded ({loadError}).</p>
-        <Button variant="outline" className="h-10" onClick={load}>Try again</Button>
+        <p className="text-ink-2">{i.t('loadError', { msg: loadError })}</p>
+        <button type="button" className="btn" onClick={load}>{i.t('tryAgain')}</button>
       </main>
     )
-  } else if (!data) {
-    body = <main className="p-6"><p className="py-12 text-ink-2" aria-busy="true">Loading 26 years of fire data…</p></main>
+  } else if (!data || !filterProps || !panelProps) {
+    body = <main className="p-6"><p className="py-12 text-ink-2" aria-busy="true">{i.t('loadingData')}</p></main>
   } else if (desktop) {
+    const cols = wide ? '300px minmax(0,1fr) 460px' : '260px minmax(0,1fr) 400px'
     body = (
-      <div className="grid h-[calc(100dvh-56px)] grid-cols-[300px_minmax(0,1fr)_minmax(420px,460px)] overflow-hidden">
-        <aside className="relative overflow-y-auto border-r border-line bg-surface/40 p-4" aria-label="Area and layers">{filters}</aside>
-        <section className="relative min-w-0" aria-label="Map">{map}</section>
-        <main className="relative min-w-0 overflow-y-auto border-l border-line p-5">
-          {answer}
-          {dataPanel}
-        </main>
-      </div>
+      <main className="grid h-[calc(100dvh-56px)] overflow-hidden"
+        style={{ gridTemplateColumns: dataCollapsed ? cols.split(' ').slice(0, 2).join(' ') : cols }}>
+        <aside className="relative overflow-y-auto border-r border-line bg-surface p-5" aria-label={i.t('filters')}>
+          <AreaPanel {...filterProps} about={about} />
+        </aside>
+        <section className="relative min-w-0" aria-label={i.t('mapRegion')}>
+          {map}
+          {drawHint}
+          {dataCollapsed && (
+            <button type="button" className="btn float absolute right-16 top-4 z-10 !bg-surface" onClick={() => setDataCollapsed(false)}>
+              <ChevronLeft size={16} aria-hidden="true" /> {i.t('showData')}
+            </button>
+          )}
+        </section>
+        {!dataCollapsed && (
+          <aside className="flex min-h-0 flex-col border-l border-line bg-surface" aria-label={i.t('dataRegion')}>
+            <div className="flex flex-none flex-col gap-3 px-[22px] pt-5">
+              <div className="flex items-start gap-3">
+                <div className="flex grow flex-col gap-0.5">
+                  <h1 className="m-0 text-xl font-bold tracking-[-0.01em]">{areaName}</h1>
+                  <span className="text-xs text-ink-3">{kindLabel}</span>
+                </div>
+                <button type="button" className="ico !size-9" aria-label={i.t('collapseData')} onClick={() => setDataCollapsed(true)}><ChevronRight size={18} aria-hidden="true" /></button>
+              </div>
+              <p className="m-0 text-[15px] leading-[1.45]">{summary ?? i.t('loadingHistory')}</p>
+              {status && (
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <StatusPill percentile={status.percentile} />
+                  <span className="text-[13px] text-ink-3">{percentileText(status, i)}</span>
+                </div>
+              )}
+              {notices}
+              <TabList tab={tab} onTab={setTab} labels={tabLabels(lastYear, i)} tabStyle="underline" />
+            </div>
+            {/* relative: the screen-reader tables (position: absolute) stay inside this scroll box */}
+            <div className="relative min-h-0 flex-1 overflow-y-auto px-[22px] pb-6">
+              <DataPanel {...panelProps} tabStyle="underline" hideTabs />
+            </div>
+          </aside>
+        )}
+      </main>
     )
   } else if (!phone) {
     body = (
-      <>
-        <section className="relative h-[48vh] min-h-[320px]" aria-label="Map">
+      <main>
+        <section className="relative h-[520px] max-h-[55dvh] min-h-[360px]" aria-label={i.t('mapRegion')}>
           {map}
-          {drawHint || <div className="absolute left-3 top-3 z-10">{filtersButton}</div>}
-        </section>
-        <main className="min-w-0 p-5">
-          {answer}
-          {dataPanel}
-        </main>
-        {filtersSheet}
-      </>
-    )
-  } else {
-    body = (
-      <>
-        <section className="relative h-[calc(100dvh-56px-260px)] min-h-[280px]" aria-label="Map">
-          {map}
-          {drawHint}
-        </section>
-        <main
-          className={drawerOpen
-            ? 'fixed inset-x-0 bottom-0 z-30 flex h-[calc(100dvh-104px)] flex-col rounded-t-2xl border-t border-line bg-surface shadow-[0_-8px_24px_rgb(0_0_0/0.4)]'
-            : 'flex h-[260px] flex-col rounded-t-2xl border-t border-line bg-surface'}
-          aria-label="Fire data for the selected area">
-          <button type="button" className="flex h-7 w-full shrink-0 items-center justify-center" onClick={() => setDrawerOpen(!drawerOpen)}
-            aria-expanded={drawerOpen} aria-label={drawerOpen ? 'Collapse to the map' : 'Expand the fire data'}>
-            <span className="h-1 w-10 rounded-full bg-line" />
-          </button>
-          {drawerOpen ? (
-            <>
-              <div className="flex shrink-0 items-center gap-3 px-4 pb-3">
-                <h1 className="m-0 min-w-0 flex-1 truncate text-base font-semibold">{areaName}</h1>
-                <button type="button" className="inline-flex size-11 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2"
-                  onClick={() => setDrawerOpen(false)} aria-label="Back to the map"><ChevronDown size={20} aria-hidden="true" /></button>
-              </div>
-              <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6">{notices}{dataPanel}</div>
-            </>
-          ) : (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
-              <div className="min-h-0 flex-1 overflow-hidden">
-                {notices}
-                <AnswerLine areaName={areaName} comparison={comparison} loading={areaLoading || !series} lastDayPartial={data.manifest.last_day_partial} brief />
-              </div>
-              <div className="grid shrink-0 grid-cols-2 gap-2">
-                <Button variant="outline" className="h-11 gap-2 text-sm" onClick={() => setFiltersOpen(true)}><SlidersHorizontal aria-hidden="true" /> Area and layers</Button>
-                <Button className="h-11 gap-2 text-sm" onClick={() => setDrawerOpen(true)}><CalendarDays aria-hidden="true" /> Fire calendar</Button>
-              </div>
+          {drawHint || (
+            <div className="touch absolute left-4 top-4 z-10">
+              <button type="button" className="btn float !bg-surface" onClick={() => setFiltersOpen(true)}>
+                <SlidersHorizontal size={18} aria-hidden="true" /> {i.t('areaAndLayers')}
+              </button>
             </div>
           )}
-        </main>
-        {filtersSheet}
-      </>
+        </section>
+        <section className="grid grid-cols-[260px_minmax(0,1fr)] gap-6 border-t border-line bg-surface px-6 pt-5 pb-8 max-[719px]:grid-cols-1" aria-label={i.t('dataRegion')}>
+          <div className="flex flex-col gap-3 self-start min-[720px]:sticky min-[720px]:top-4">
+            <div className="flex flex-col gap-1">
+              <h1 className="m-0 text-xl font-semibold">{areaName}</h1>
+              <span className="text-xs text-ink-3">{kindLabel}</span>
+            </div>
+            <p className="m-0 text-base leading-[1.45]">{summary ?? i.t('loadingHistory')}</p>
+            {status && <div><StatusPill percentile={status.percentile} /></div>}
+            {status && <span className="text-[13px] text-ink-3">{percentileText(status, i)}</span>}
+            <div className="flex flex-col gap-1 text-sm leading-[1.45] text-ink-2">{about}</div>
+            {notices}
+            <button type="button" className="btn touch mt-2 !min-h-12 !rounded-xl !text-sm !font-semibold" onClick={download} disabled={!filterProps.canDownload}>
+              <Download size={18} aria-hidden="true" /> {i.t('downloadCsv')}
+            </button>
+          </div>
+          <div className="min-w-0">
+            <DataPanel {...panelProps} tabStyle="segment" />
+          </div>
+        </section>
+        <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <SheetContent side="left" showCloseButton={false} className="w-[380px] max-w-[90vw] gap-0 p-0 sm:max-w-[380px]">
+            <SheetHeader className="flex h-16 flex-none flex-row items-center gap-3 border-b border-line py-0 pr-2 pl-6">
+              <SheetTitle className="m-0 flex-1 text-xl font-semibold">{i.t('areaAndLayers')}</SheetTitle>
+              <SheetDescription className="sr-only">{i.t('areaAndLayersDesc')}</SheetDescription>
+              <button type="button" className="ico touch !border-0 !bg-transparent" aria-label={i.t('closeAreaLayers')} onClick={() => setFiltersOpen(false)}><X size={20} aria-hidden="true" /></button>
+            </SheetHeader>
+            <div className="relative min-h-0 flex-1 overflow-y-auto p-6">
+              <AreaPanel {...filterProps} touch />
+            </div>
+            <div className="touch flex-none border-t border-line px-6 pt-4 pb-6">
+              <button type="button" className="btn main w-full" onClick={() => setFiltersOpen(false)}>{i.t('showOnMap')}</button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      </main>
+    )
+  } else {
+    return (
+      <PhoneLayout data={data} area={area} onArea={chooseArea} onPickMuni={pickMuni} name={areaName} kindLabel={kindLabel} dataDate={dataDate}
+        summary={summary} percentile={status?.percentile ?? null} percentileText={status ? percentileText(status, i, true) : null}
+        view={sheet} onView={setSheet} peekHeight={peekHeight} map={map} notices={notices}
+        tabs={<TabList tab={tab} onTab={setTab} labels={tabLabels(lastYear, i, true)} tabStyle="segment" />}
+        panel={<DataPanel {...panelProps} tabStyle="segment" hideTabs />}
+        canDownload={filterProps.canDownload} onDownload={download}
+        drawMode={drawMode} onDrawMode={startDraw} onConfirmBox={() => setConfirmBox((n) => n + 1)}
+        biomes={biomes?.list ?? []} standings={standings} biomeStandings={biomeStandings}
+        munis={munis} layer={layer} onLayer={setLayer} recurrenceYears={filterProps.recurrenceYears} period={period} onPeriod={setPeriod}
+        recentSpan={filterProps.recentSpan} values={view} onValues={setView} biomeBorders={biomeBorders} onBiomeBorders={setBiomeBorders}
+        stateBorders={stateBorders} onStateBorders={setStateBorders} places={places} onPlaces={setPlaces} lang={lang} onLang={onLang} />
     )
   }
 
+  const navLink = 'flex h-9 items-center rounded-lg px-3.5 text-sm text-ink-2 no-underline hover:text-ink aria-[current=page]:bg-nav-on aria-[current=page]:font-semibold aria-[current=page]:text-ink max-[1100px]:min-h-11 max-[1100px]:rounded-[10px] max-[1100px]:px-3'
+  const langSelect = (
+    <label className="flex h-9 items-center gap-1.5 rounded-lg border border-line-2 px-2.5 text-ink-2 max-[1100px]:h-11 max-[1100px]:rounded-[10px]">
+      <Globe size={16} aria-hidden="true" />
+      <span className="sr-only">{i.t('language')}</span>
+      <select className="border-0 bg-transparent text-[13px] text-ink outline-none [&>option]:bg-surface" value={lang} onChange={(e) => onLang(e.target.value as Lang)}>
+        <option value="en" lang="en">{shortLang ? 'EN' : 'English'}</option>
+        <option value="pt" lang="pt-BR">{shortLang ? 'PT' : 'Português'}</option>
+      </select>
+    </label>
+  )
+  const header = phone ? (
+    page === 'method' ? (
+      <header className="touch sticky top-0 z-20 flex h-16 items-center gap-2 border-b border-line bg-surface pr-4 pl-1">
+        <a href="#" className="ico !border-0 !bg-transparent !text-ink" aria-label={i.t('backToMap')}><ChevronLeft size={22} aria-hidden="true" /></a>
+        <span className="flex-1 text-lg font-semibold">{i.t('navMethod')}</span>
+        {langSelect}
+      </header>
+    ) : null
+  ) : (
+    <header className="flex h-14 flex-none items-center gap-4 border-b border-line bg-surface px-5 max-[1100px]:h-16 max-[1100px]:gap-3 max-[1100px]:pr-4 max-[1100px]:pl-6">
+      <a href="#" className="flex min-h-11 items-center gap-2.5 text-ink no-underline">
+        <Logo />
+        <span className="flex flex-col leading-[1.15]">
+          <span className="text-base font-bold tracking-[-0.01em]">Jangada Orbital</span>
+          <span className="text-xs text-ink-3 max-[1100px]:hidden">{i.t('tagline')}</span>
+        </span>
+      </a>
+      <span className="grow" />
+      {data && (
+        <span className="flex h-8 items-center gap-2 rounded-2xl bg-surface-2 px-3 text-[13px] text-ink-2 max-[1100px]:bg-transparent max-[1100px]:px-0 max-[1100px]:text-xs max-[1100px]:text-ink-3 max-[719px]:hidden">
+          <span className="size-2 rounded-full bg-live max-[1100px]:hidden" aria-hidden="true" />{i.t('dataThrough', { date: dataDate })}
+        </span>
+      )}
+      <nav aria-label="Main" className="flex gap-1">
+        <a href="#" className={navLink} aria-current={page === 'calendar' ? 'page' : undefined}>{i.t('navCalendar')}</a>
+        <a href="#method" className={navLink} aria-current={page === 'method' ? 'page' : undefined}>{i.t('navMethod')}</a>
+      </nav>
+      {langSelect}
+      <button type="button" className="ico !h-9 !w-9 max-[1100px]:!size-11" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        aria-label={theme === 'dark' ? i.t('toLight') : i.t('toDark')}>
+        {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+      </button>
+      <a className="inline-flex min-h-9 items-center text-[13px] text-link no-underline hover:underline max-[1100px]:-mx-1.5 max-[1100px]:min-h-11 max-[1100px]:min-w-11 max-[1100px]:justify-center max-[1100px]:px-1.5" href={REPO} target="_blank" rel="noreferrer">
+        {i.t('code')}<span className="sr-only">{i.t('codeSr')}</span>
+      </a>
+    </header>
+  )
+
   return (
     <>
-      <header className="flex h-14 items-center gap-4 border-b border-line bg-surface px-6 max-lg:gap-1 max-lg:px-3">
-        <a className="flex items-baseline gap-2.5 whitespace-nowrap text-base font-semibold no-underline" href="#" onClick={() => setPage('calendar')}>
-          Jangada Orbital <span className="text-sm font-normal text-ink-2 max-lg:hidden">Harmonized fire calendar · Brazil</span>
-        </a>
-        <nav aria-label="Main" className="ml-auto flex items-center gap-1 max-lg:gap-0">
-          {data && <span className="mr-2 text-[13px] text-ink-3 tabular-nums max-lg:hidden">Data through {data.manifest.data_date}</span>}
-          <button className={navLink} aria-current={page === 'calendar' ? 'page' : undefined} onClick={() => setPage('calendar')}>Calendar</button>
-          <button className={navLink} aria-current={page === 'method' ? 'page' : undefined} onClick={() => setPage('method')}>Method</button>
-          <button className={navLink} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}>
-            {theme === 'dark' ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
-          </button>
-          <a className={navLink} href={REPO} target="_blank" rel="noreferrer">
-            <span className="max-lg:hidden">Code</span><ExternalLink size={14} aria-label="Source code on GitHub" />
-          </a>
-        </nav>
-      </header>
+      {header}
       {body}
     </>
   )
