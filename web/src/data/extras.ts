@@ -75,6 +75,14 @@ export async function loadRecurrence(): Promise<Recurrence | null> {
 /** class 1..7 of the orange ramp for `n` of `span` years with fire (0 = none) */
 export const recurrenceClass = (n: number, span: number) => (n <= 0 ? 0 : Math.max(1, Math.min(7, Math.ceil((n / span) * 7))))
 
+const mercatorY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
+
+/** Canvas row of latitude `lat` in an image of `rows` rows that MapLibre stretches between `north` and `south`: image
+ * sources are placed linearly in Web Mercator, so rows follow Mercator y, not latitude. */
+export function mercatorRow(lat: number, north: number, south: number, rows: number): number {
+  return Math.round(((mercatorY(north) - mercatorY(lat)) / (mercatorY(north) - mercatorY(south))) * rows)
+}
+
 /** Years with fire in `from`..`to` for one cell mask. */
 export function yearsWithFire(mask: number, first: number, from: number, to: number): number {
   let n = 0

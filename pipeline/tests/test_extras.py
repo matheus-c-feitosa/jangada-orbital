@@ -28,8 +28,12 @@ def test_ytd_standing_matches_the_web_rule():
     # the partial month is compared pro rata: 15 of 30 April days at the usual pace is the median
     s = _series(lambda y, m: 10, [10, 10, 10, 5])
     assert ytd_standing(s, "2011-04", 15)["percentile"] == 50
+    # years before an area's first detection count as zero, as in the web rule (every complete year since 2001):
+    # 2001-2007 have no rows (no detections) and 2008-2010 tie with this year, so 7 below and 3 ties of 10
+    s = _series(lambda y, m: 1, [1], first=2008)
+    assert ytd_standing(s, "2011-01", 31) == {"ytd": 1.0, "percentile": 85, "first": 2001, "last": 2010}
     # too little history gives no standing
-    assert ytd_standing(_series(lambda y, m: 1, [1], first=2008), "2011-01", 31) is None
+    assert ytd_standing({"2004-01": 1.0}, "2004-01", 31) is None
 
 
 def _load(name):

@@ -54,6 +54,7 @@ SAT_CODE = {"Terra": 0, "Aqua": 1, "S-NPP": 2, "NOAA-20": 3, "NOAA-21": 4}
 
 FIRE_MIN = 0.5            # Aqua-MODIS-equivalent detections for a cell-year to count as "had fire" (recurrence)
 MIN_HISTORY = 5           # previous complete years needed for a percentile
+FIRST_YEAR = 2001         # first complete year of the series (it starts in November 2000)
 SIMPLIFY_BIOMES = 0.01    # degrees (~1 km): the biome outline is a map overlay, the cells carry the statistics
 SMALL_SAMPLE = 20         # detections; below this an FRP median is flagged as a small sample
 
@@ -128,15 +129,15 @@ def ytd_standing(series: dict[str, float], last_month: str, days: int) -> dict |
             total += v * (fraction if (m == upto and y != year) else 1.0)
         return total
 
-    first = min(int(k[:4]) for k in series) if series else year
-    history = [to_date(y) for y in range(max(first, 2001), year)]
+    # every complete year since 2001, as in the web rule: a year with no detections in the area counts as zero
+    history = [to_date(y) for y in range(FIRST_YEAR, year)]
     if len(history) < MIN_HISTORY:
         return None
     current = to_date(year)
     below = sum(h < current for h in history)
     ties = sum(h == current for h in history)
     return {"ytd": round(current, 1), "percentile": round(100 * (below + ties / 2) / len(history)),
-            "first": max(first, 2001), "last": year - 1}
+            "first": FIRST_YEAR, "last": year - 1}
 
 
 # ---------------------------------------------------------------- biomes

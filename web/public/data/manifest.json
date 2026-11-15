@@ -54,8 +54,8 @@
     },
     "municipalities_ranking": {
       "path": "municipalities/ranking.json",
-      "bytes": 239789,
-      "sha256": "4689af8a0ab7d1a28c91c8d520700e65c6cbb8f81fb5591df12894bfbe09978e"
+      "bytes": 240902,
+      "sha256": "7c73c8998f74e2f330a12f7f19da5fd1c489d7699cfeb273df631057dc646886"
     },
     "validation": {
       "path": "validation.json",

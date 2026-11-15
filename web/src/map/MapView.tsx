@@ -7,7 +7,7 @@ import { TerraDraw, TerraDrawPolygonMode, TerraDrawRectangleMode } from 'terra-d
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter'
 import { Flame, X } from 'lucide-react'
 import type { Ring } from '../geo/aoi'
-import { recurrenceClass, yearsWithFire, type Recent, type Recurrence } from '../data/extras'
+import { mercatorRow, recurrenceClass, yearsWithFire, type Recent, type Recurrence } from '../data/extras'
 import { ordinal, percentileClass, PERCENTILE_LABEL } from '../rank/ranking'
 
 export type DrawMode = 'none' | 'rectangle' | 'polygon'
@@ -78,17 +78,20 @@ function anomalyColor(standings: Record<string, StateStanding>): ExpressionSpeci
 }
 
 
-/** The recurrence grid as one image (one pixel per 0.1° cell), drawn on a canvas and placed over Brazil. */
+/** The recurrence grid as one image (one pixel column per 0.1° cell), drawn on a canvas and placed over Brazil.
+ * MapLibre stretches an image source linearly in Web Mercator, so the rows follow Mercator y, not latitude: drawn
+ * linearly in latitude, the cells in central Brazil land about 1° (100 km) south of where they are. */
 function recurrenceImage(r: Recurrence, from: number, to: number) {
   let latMin = Infinity, latMax = -Infinity, lonMin = Infinity, lonMax = -Infinity
   for (const [la, lo] of r.cells) {
     latMin = Math.min(latMin, la); latMax = Math.max(latMax, la); lonMin = Math.min(lonMin, lo); lonMax = Math.max(lonMax, lo)
   }
+  const west = lonMin / 10, east = (lonMax + 1) / 10, north = (latMax + 1) / 10, south = latMin / 10
   const w = lonMax - lonMin + 1
-  const h = latMax - latMin + 1
+  const rows = (latMax - latMin + 1) * 4 // four canvas rows per cell keep the rounding within a quarter of a cell
   const canvas = document.createElement('canvas')
   canvas.width = w
-  canvas.height = h
+  canvas.height = rows
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
   const colors = RAMP_VARS.map(cssVar)
@@ -97,9 +100,9 @@ function recurrenceImage(r: Recurrence, from: number, to: number) {
     const c = recurrenceClass(yearsWithFire(mask, r.first, from, to), span)
     if (!c) continue
     ctx.fillStyle = colors[c - 1]
-    ctx.fillRect(lo - lonMin, latMax - la, 1, 1)
+    const top = mercatorRow((la + 1) / 10, north, south, rows)
+    ctx.fillRect(lo - lonMin, top, 1, Math.max(1, mercatorRow(la / 10, north, south, rows) - top))
   }
-  const west = lonMin / 10, east = (lonMax + 1) / 10, north = (latMax + 1) / 10, south = latMin / 10
   return {
     url: canvas.toDataURL(),
     coordinates: [[west, north], [east, north], [east, south], [west, south]] as [[number, number], [number, number], [number, number], [number, number]],
@@ -256,10 +259,11 @@ export function MapView(p: Props) {
         const f = map.queryRenderedFeatures(e.point, { layers: ['recent'] })[0]
         if (f) return setPop({ kind: 'recent', i: Number(f.properties?.i), x: e.point.x, y: e.point.y })
       }
-      if (l === 'recurrence') {
-        return setPop({ kind: 'cell', lat: Math.floor(e.lngLat.lat * 10), lon: Math.floor(e.lngLat.lng * 10), x: e.point.x, y: e.point.y })
-      }
       const uf = map.queryRenderedFeatures(e.point, { layers: ['states-hit'] })[0]?.properties?.uf as string | undefined
+      // outside Brazil there is no data: no cell card there, rather than "no fire recorded"
+      if (l === 'recurrence') {
+        return setPop(uf ? { kind: 'cell', lat: Math.floor(e.lngLat.lat * 10), lon: Math.floor(e.lngLat.lng * 10), x: e.point.x, y: e.point.y } : null)
+      }
       setPop(uf ? { kind: 'state', uf, x: e.point.x, y: e.point.y } : null)
     })
     map.on('dragstart', () => setPop(null))

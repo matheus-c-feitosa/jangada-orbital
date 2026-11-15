@@ -84,9 +84,12 @@ Possible improvements:
   nearest one on the coast; the six biomes add up exactly to Brazil.
 - **Fire recurrence:** a cell-year counts as "had fire" when its harmonized value reaches 0.5 Aqua-MODIS-equivalent
   detections, so a single small VIIRS pixel in a converted year does not count as a fire year. The app lets the period
-  change; it defaults to the last ten complete years.
-- **Municipality ranking:** cells whose centre falls inside the IBGE outline (no nearest fallback, so 290 very small
-  municipalities have no cell); percentile with the same rule as the state ranking.
+  change; it defaults to the last ten complete years. The grid is drawn as one image whose rows follow Web Mercator, as
+  the map does, so each cell sits where it is.
+- **Municipality ranking:** cells whose centre falls inside the IBGE outline (no nearest fallback, so 267
+  municipalities have no cell with a detection); percentile with the same rule as the state ranking, every complete
+  year since 2001 (a year with no detections counts as zero). With fewer than 20 detections so far the density and the
+  percentile are a small sample: the app lists those municipalities last when ranking by density or against normal.
 - **Validation scatter:** the held-out fit of `jangada-harmonize` recomputed from the published observed counts; it
   reproduces the published metrics.
 - **El Niño / La Niña:** NOAA CPC Oceanic Niño Index. A phase needs five consecutive overlapping seasons at or beyond

@@ -178,6 +178,17 @@ test('biomes and municipalities can be ranked, and a municipality loads as an ar
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible({ timeout: 30_000 })
 })
 
+test('municipalities with fewer than 20 detections do not lead the density ranking', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('tab', { name: 'Ranking' }).click()
+  await page.getByRole('group', { name: 'Rank' }).getByRole('button', { name: 'Municipalities' }).click({ timeout: 30_000 })
+  await page.getByRole('group', { name: 'Sort by' }).getByRole('button', { name: 'Per 1,000 km²' }).click()
+  const first = page.getByRole('table', { name: /^Municipalities by/ }).getByRole('row').nth(1)
+  const soFar = Number((await first.innerText()).match(/([\d,]+) so far/)![1].replaceAll(',', ''))
+  expect(soFar).toBeGreaterThanOrEqual(20)
+  await expect(page.getByText(/Fewer than 20 detections so far is a small sample/)).toBeVisible()
+})
+
 test('climate context marks El Niño and La Niña years, and the Season tab shows fire intensity', async ({ page }) => {
   await page.goto('./')
   await page.getByRole('checkbox', { name: /Climate context/ }).check({ timeout: 30_000 })

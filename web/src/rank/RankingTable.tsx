@@ -30,8 +30,13 @@ interface Row {
   percentile: number
   /** municipalities have no monthly series in the browser, so they cannot join the comparison */
   comparable: boolean
+  /** fewer than SMALL_SAMPLE detections so far: density and percentile are noise (spec 002 edge cases) */
+  small?: boolean
   select: () => void
 }
+
+/** below this many detections so far, a municipality's density and percentile read "small sample" */
+const SMALL_SAMPLE = 20
 
 interface Props {
   data: AppData
@@ -70,16 +75,18 @@ export function RankingTable(p: Props) {
     if (!p.munis) return []
     const out: Row[] = p.munis.rows.map(([id, name, uf, ytd, km2, pct]) => ({
       key: id, name: `${name}, ${uf}`, ytd, km2, density: km2 > 0 ? (ytd / km2) * 1000 : 0, percentile: pct, comparable: false,
-      select: () => p.onSelectMuni(id, uf, name),
+      small: ytd < SMALL_SAMPLE, select: () => p.onSelectMuni(id, uf, name),
     }))
     const metric = (r: Row) => (sort === 'total' ? r.ytd : sort === 'density' ? r.density : r.percentile)
-    return out.sort((a, b) => metric(b) - metric(a) || b.ytd - a.ytd)
+    // small samples go last by density and against normal: one detection in a tiny municipality is not a hot spot
+    const smallLast = (a: Row, b: Row) => (sort === 'total' ? 0 : Number(!!a.small) - Number(!!b.small))
+    return out.sort((a, b) => smallLast(a, b) || metric(b) - metric(a) || b.ytd - a.ytd)
     // the callbacks are stable (useCallback in App)
   }, [data, p.biomes, p.munis, scope, sort, lastMonth, days])
 
   const metric = (r: Row) => (sort === 'total' ? r.ytd : sort === 'density' ? r.density : r.percentile)
-  const value = (r: Row) => (sort === 'total' ? fmt.format(r.ytd) : sort === 'density' ? dens.format(r.density) : ordinal(r.percentile))
-  const max = Math.max(...rows.map(metric), 1)
+  const value = (r: Row) => (sort === 'total' ? fmt.format(r.ytd) : r.small ? 'Small sample' : sort === 'density' ? dens.format(r.density) : ordinal(r.percentile))
+  const max = Math.max(...rows.filter((r) => sort === 'total' || !r.small).map(metric), 1)
   const shown = all ? rows.slice(0, scope === 'municipalities' ? 200 : rows.length) : rows.slice(0, 10)
   const top = rows[0]
   const full = compare.length >= MAX_COMPARE
@@ -91,7 +98,8 @@ export function RankingTable(p: Props) {
     const lines = [
       `# Jangada Orbital ranking of ${scope}, data_version=${manifest.data_version}; through ${manifest.data_date}; sorted by ${sort}`,
       'rank,code,name,detections_so_far,area_km2,per_1000_km2,percentile',
-      ...rows.map((r, i) => [i + 1, r.key.replace('bio:', ''), `"${r.name}"`, Math.round(r.ytd), Math.round(r.km2), dens.format(r.density), r.percentile].join(',')),
+      // plain numbers: a grouped "1,234.5" would split the CSV column
+      ...rows.map((r, i) => [i + 1, r.key.replace('bio:', ''), `"${r.name}"`, Math.round(r.ytd), Math.round(r.km2), r.density.toFixed(1), r.percentile].join(',')),
     ]
     downloadText(lines.join('\n') + '\n', `jangada-orbital_ranking_${scope}_${manifest.data_version.replaceAll('-', '')}_${sort}.csv`)
   }
@@ -152,16 +160,20 @@ export function RankingTable(p: Props) {
                         aria-label={`Select ${r.name} as the area`}>
                         <span className="font-medium">{r.name}</span>
                         <span className="text-xs text-ink-3">
-                          {sort !== 'total' && `${fmt.format(r.ytd)} so far, `}
-                          {sort !== 'density' ? `${dens.format(r.density)} per 1,000 km²` : `${ordinal(r.percentile)} percentile`}
+                          {r.small ? (sort === 'total' ? 'small sample' : `${fmt.format(r.ytd)} so far`) : (
+                            <>
+                              {sort !== 'total' && `${fmt.format(r.ytd)} so far, `}
+                              {sort !== 'density' ? `${dens.format(r.density)} per 1,000 km²` : `${ordinal(r.percentile)} percentile`}
+                            </>
+                          )}
                         </span>
                       </button>
                     </td>
                     <td className="pr-3">
                       <div className="flex flex-col items-end gap-1">
-                        <span>{value(r)}</span>
+                        <span className={r.small && sort !== 'total' ? 'text-xs text-ink-3' : undefined}>{value(r)}</span>
                         <span className="relative block h-1.5 w-full rounded-full bg-surface-2" aria-hidden="true">
-                          <span className="absolute inset-y-0 left-0 rounded-full bg-brand" style={{ width: `${Math.max(3, (metric(r) / max) * 100)}%` }} />
+                          {!(r.small && sort !== 'total') && <span className="absolute inset-y-0 left-0 rounded-full bg-brand" style={{ width: `${Math.max(3, (metric(r) / max) * 100)}%` }} />}
                         </span>
                       </div>
                     </td>
@@ -173,7 +185,7 @@ export function RankingTable(p: Props) {
         </div>
       )}
       {full && <p className="m-0 text-[13px] text-ink-2">You can compare up to {MAX_COMPARE} areas. Clear one to add another.</p>}
-      {scope === 'municipalities' && <p className="m-0 text-xs text-ink-3">Municipalities are counted on the 0.1° cells whose centre falls inside them; very small ones may have none. Selecting one loads it as an area.</p>}
+      {scope === 'municipalities' && <p className="m-0 text-xs text-ink-3">Municipalities are counted on the 0.1° cells whose centre falls inside them; very small ones may have none. Fewer than {SMALL_SAMPLE} detections so far is a small sample: those go last by density and against normal. Selecting one loads it as an area.</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" className="h-11 text-sm" aria-expanded={all} onClick={() => setAll(!all)}>
           {all ? 'Show top 10' : scope === 'municipalities' ? 'Show top 200' : `Show all ${rows.length}`}

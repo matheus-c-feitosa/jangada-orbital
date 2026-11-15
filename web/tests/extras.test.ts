@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { decodeRecent, decodeRows, recurrenceClass, yearsWithFire } from '../src/data/extras'
+import { decodeRecent, decodeRows, mercatorRow, recurrenceClass, yearsWithFire } from '../src/data/extras'
 
 describe('recurrence (FR-022)', () => {
   test('rows decode to cells with absolute longitudes', () => {
@@ -12,6 +12,14 @@ describe('recurrence (FR-022)', () => {
     expect(yearsWithFire(0b101, 2001, 2001, 2005)).toBe(2)
     expect(yearsWithFire(0b101, 2001, 2002, 2005)).toBe(1)
     expect(yearsWithFire(0b11111, 2001, 2003, 2004)).toBe(2)
+  })
+
+  test('image rows follow Web Mercator, where MapLibre places an image source', () => {
+    expect(mercatorRow(5, 5, -34, 1000)).toBe(0)
+    expect(mercatorRow(-34, 5, -34, 1000)).toBe(1000)
+    // linear in latitude, -15 would sit at row 513 (20 of 39 degrees down); in Mercator it is at row 490,
+    // 23 rows (0.9 degree) higher, which is where the basemap draws -15
+    expect(mercatorRow(-15, 5, -34, 1000)).toBe(490)
   })
 
   test('classes fill the ramp from 1 year to the whole period', () => {
