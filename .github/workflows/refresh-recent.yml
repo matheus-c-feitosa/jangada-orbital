@@ -1,0 +1,65 @@
+# Refreshes the "last 7 days" map layer (web/public/data/recent.json) from the public NASA FIRMS near-real-time files,
+# checks it, commits it and publishes the site. T050 (#17), reduced scope: the full daily update of the series needs
+# the raw archive (data/, about 1.4 GB, not in git) and stays a manual pipeline run.
+#
+# No FIRMS key is needed: the 7-day files are public. Industrial heat sources are filtered with the list kept in
+# pipeline/src/jangada/static_sources.parquet. If any step fails, nothing is committed and the site keeps its data.
+name: Refresh last 7 days
+
+on:
+  workflow_dispatch:
+  # Daily at 06:00 UTC. Off until the Space Apps judging ends, so the repository gets no automatic commits after the
+  # submission deadline; to turn it on, remove the "#" of the two lines below.
+  # schedule:
+  #   - cron: '0 6 * * *'
+
+permissions:
+  contents: write   # commit recent.json and manifest.json
+  actions: write    # start the Pages deploy (a push made with GITHUB_TOKEN does not trigger workflows)
+
+concurrency:
+  group: refresh-recent
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Download the FIRMS 7-day files and rebuild recent.json
+        working-directory: pipeline
+        run: |
+          uv sync --frozen
+          uv run jangada-extras recent
+
+      - name: Check the published data
+        working-directory: pipeline
+        run: uv run pytest
+
+      - name: Install gitleaks (checksum verified)
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          file="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfLO "$base/$file"
+          curl -sSfL "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt" | grep " $file\$" | sha256sum -c -
+          tar -xzf "$file" gitleaks
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Commit and publish when the data changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git add web/public/data/recent.json web/public/data/manifest.json
+          if git diff --cached --quiet; then
+            echo "recent.json is unchanged"
+            exit 0
+          fi
+          gitleaks git --staged --pre-commit -c .gitleaks.toml --no-banner --redact .
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "data: refresh the last 7 days from FIRMS near real time"
+          git push
+          gh workflow run pages.yml --ref main

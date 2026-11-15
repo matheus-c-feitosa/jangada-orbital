@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Crosshair, Download, Pentagon, RectangleHorizontal } from 'lucide-react'
+import { Crosshair, Download, Pentagon, Printer, RectangleHorizontal } from 'lucide-react'
 import { SATELLITES, type AppData, type Satellite } from './data/load'
 import { circleRing, type Ring } from './geo/aoi'
 import type { BiomeInfo, MuniNames } from './data/extras'
@@ -123,6 +123,8 @@ interface Props {
   onRange: (from: number, to: number) => void
   canDownload: boolean
   onDownload: () => void
+  /** "Print report" (desktop) */
+  onPrint?: () => void
   /** "About this area" lines (desktop); the tablet shows them beside the data instead */
   about?: ReactNode
   /** tablet drawer: 48 px controls, biomes as radio buttons, no download button (it sits beside the data) */
@@ -300,6 +302,11 @@ export function AreaPanel(p: Props) {
           <button type="button" className="btn main" onClick={p.onDownload} disabled={!p.canDownload}>
             <Download size={16} strokeWidth={2.2} aria-hidden="true" /> {i.t('downloadCsv')}
           </button>
+          {p.onPrint && (
+            <button type="button" className="btn" onClick={p.onPrint} disabled={!p.canDownload}>
+              <Printer size={16} aria-hidden="true" /> {i.t('printReport')}
+            </button>
+          )}
         </>
       )}
       {/* the CSV holds monthly counts; single detections need the FIRMS archive (and a key that never reaches this site) */}

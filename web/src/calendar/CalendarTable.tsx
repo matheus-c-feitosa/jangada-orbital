@@ -223,7 +223,7 @@ export function CalendarTable({ image, months, values, harmonized, source, lo, h
       <div className="flex items-center justify-between gap-3">
         <span className="text-[13px] leading-snug text-ink-3" aria-hidden="true">{caption}</span>
         {climateAvailable && onClimate && (
-          <label className="flex min-h-11 flex-none cursor-pointer items-center gap-2 text-[13px] text-ink-2">
+          <label className="flex min-h-11 flex-none cursor-pointer items-center gap-2 text-[13px] text-ink-2 print:hidden">
             <input type="checkbox" className="m-0 size-5 accent-[var(--brand)]" checked={!!climate} onChange={(e) => onClimate(e.target.checked)} />
             {i.t('climate')} <span className="sr-only">(El Niño / La Niña)</span>
           </label>
@@ -287,7 +287,7 @@ export function CalendarTable({ image, months, values, harmonized, source, lo, h
         {oni && <span>{i.t('oniNote')}</span>}
       </div>
       {image && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
           <button type="button" className="btn !min-h-11 !rounded-[10px]" onClick={saveImage} disabled={saving}>
             <ImageDown size={18} aria-hidden="true" /> {i.t('downloadImage')}
           </button>

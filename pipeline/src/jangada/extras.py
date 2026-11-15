@@ -24,6 +24,7 @@ import sys
 import time
 import zipfile
 from datetime import date
+from pathlib import Path
 
 from jangada import config
 from jangada.download import download_file
@@ -36,6 +37,8 @@ HARMONIZED = WEB_DATA / "harmonized.parquet"
 OBSERVED = WEB_DATA / "observed.parquet"
 SERIES = WEB_DATA / "series.json"
 MANIFEST = WEB_DATA / "manifest.json"
+# 0.01-degree cells where FIRMS flagged static sources (types 2 and 3: volcanoes, industry, gas flares) in the archive
+STATIC_SOURCES = Path(__file__).with_name("static_sources.parquet")
 
 BIOMES_URL = "https://geoftp.ibge.gov.br/informacoes_ambientais/estudos_ambientais/biomas/vetores/Biomas_250mil.zip"
 # CD_Bioma of the IBGE file -> id used by the app, official name
@@ -412,6 +415,7 @@ def usual_p90_sql(source: str, month_of_year: int) -> str:
 
 def recent(con) -> None:
     spatial(con)
+    EXTRAS.mkdir(parents=True, exist_ok=True)  # a fresh checkout (the daily refresh) has no data/ folder
     paths = {}
     for sat, url in RECENT_URLS.items():
         p = EXTRAS / f"recent_{sat}.csv"
@@ -435,6 +439,13 @@ def recent(con) -> None:
     if list(config.POINTS.glob("*.parquet")):
         con.execute(f"""INSERT INTO static SELECT DISTINCT floor(lat * 100)::INT, floor(lon * 100)::INT
                         FROM read_parquet('{config.POINTS.as_posix()}/*.parquet', union_by_name = true) WHERE type IN (2, 3)""")
+        # kept with the code, so the daily refresh (.github/workflows/refresh-recent.yml) filters the same sources
+        # without the raw archive
+        con.execute(f"COPY (SELECT * FROM static ORDER BY a, b) TO '{STATIC_SOURCES.as_posix()}' (FORMAT parquet, COMPRESSION zstd)")
+    elif STATIC_SOURCES.exists():
+        con.execute(f"INSERT INTO static SELECT a, b FROM read_parquet('{STATIC_SOURCES.as_posix()}')")
+    else:
+        log("recent: no static-source list; industrial heat sources are not filtered")
     con.execute("""
         CREATE OR REPLACE TEMP TABLE rb AS
         SELECT r.*, s.code AS uf, floor(r.lat * 10)::INT AS cell_lat, floor(r.lon * 10)::INT AS cell_lon

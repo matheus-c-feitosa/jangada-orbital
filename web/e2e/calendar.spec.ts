@@ -123,6 +123,28 @@ test('the calendar names the busiest periods, shows the range of estimates and s
   expect((await download).suggestedFilename()).toMatch(/^jangada-orbital-calendar_brazil_2001-\d{4}\.png$/)
 })
 
+test('the printed report holds the area, the calendar, the season and the sources on at most two A4 pages', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.getByRole('button', { name: 'Download CSV' })).toBeEnabled({ timeout: 30_000 })
+  // headless Chromium has no print dialog: the button's window.print() only fires beforeprint here
+  await page.evaluate(() => { window.print = () => { window.dispatchEvent(new Event('beforeprint')) } })
+  await page.getByRole('button', { name: 'Print report' }).click()
+  await page.emulateMedia({ media: 'print' })
+  const report = page.getByRole('article', { name: 'Fire report, Brazil' })
+  await expect(report).toBeVisible()
+  await expect(report.getByRole('table', { name: /Fire detections per month/ })).toBeVisible()
+  await expect(report.getByRole('heading', { name: 'Fire-season rhythm' })).toBeVisible()
+  await expect(report.getByText(/Source: NASA FIRMS/)).toBeVisible()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect(page.getByRole('button', { name: 'Download CSV' })).toBeHidden()
+  const pdf = await page.pdf({ format: 'A4', printBackground: true })
+  expect((pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length).toBeLessThanOrEqual(2)
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
+  await page.emulateMedia({ media: 'screen' })
+  await expect(report).toHaveCount(0)
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+})
+
 test('an area smaller than one grid cell uses the cell around it and says so', async ({ page }) => {
   await page.goto('./')
   await expect(page.getByRole('button', { name: 'Download CSV' })).toBeEnabled({ timeout: 30_000 })
