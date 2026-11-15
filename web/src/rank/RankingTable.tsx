@@ -1,24 +1,15 @@
 import { useMemo, useState } from 'react'
 import { Download } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import type { AppData } from '../data/load'
 import type { BiomeData, MuniRanking } from '../data/extras'
 import { downloadText } from '../data/csv'
-import { ordinal, rankAreas, type RankSort } from './ranking'
+import { rankAreas, type RankSort } from './ranking'
+import { useI18n, type Key } from '../i18n'
 
-const fmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
-const dens = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 export const MAX_COMPARE = 3
 
-const SORTS: { key: RankSort; label: string; column: string }[] = [
-  { key: 'total', label: 'Total this year', column: 'So far' },
-  { key: 'density', label: 'Per 1,000 km²', column: 'Per 1,000 km²' },
-  { key: 'percentile', label: 'Against normal', column: 'Percentile' },
-]
-
 export type RankScope = 'states' | 'biomes' | 'municipalities'
-const SCOPE_LABEL: Record<RankScope, string> = { states: 'States', biomes: 'Biomes', municipalities: 'Municipalities' }
-const NOUN: Record<RankScope, string> = { states: 'State', biomes: 'Biome', municipalities: 'Municipality' }
+const SCOPE_KEY: Record<RankScope, Key> = { states: 'scopeStates', biomes: 'scopeBiomes', municipalities: 'scopeMunis' }
 
 interface Row {
   /** state code, "bio:<id>" or IBGE municipality id */
@@ -54,11 +45,18 @@ interface Props {
 /** Spec 002, story 3 (FR-024): states, biomes or municipalities ranked by this year so far; rows select the area or
  * join the comparison. */
 export function RankingTable(p: Props) {
+  const i = useI18n()
   const { data, compare } = p
   const [scope, setScope] = useState<RankScope>('states')
   const [sort, setSort] = useState<RankSort>('total')
   const [all, setAll] = useState(false)
   const { manifest } = data
+  const year = manifest.last_month.slice(0, 4)
+  const SORTS: { key: RankSort; label: string; column: string }[] = [
+    { key: 'total', label: i.t('sortTotal', { year }), column: i.t('colTotal', { year }) },
+    { key: 'density', label: i.t('sortDensity'), column: i.t('sortDensity') },
+    { key: 'percentile', label: i.t('sortNormal'), column: i.t('sortNormal') },
+  ]
   const lastMonth = manifest.last_month.slice(0, 7)
   const days = manifest.last_month_days
 
@@ -85,85 +83,88 @@ export function RankingTable(p: Props) {
   }, [data, p.biomes, p.munis, scope, sort, lastMonth, days])
 
   const metric = (r: Row) => (sort === 'total' ? r.ytd : sort === 'density' ? r.density : r.percentile)
-  const value = (r: Row) => (sort === 'total' ? fmt.format(r.ytd) : r.small ? 'Small sample' : sort === 'density' ? dens.format(r.density) : ordinal(r.percentile))
+  const value = (r: Row) => (sort === 'total' ? i.int(r.ytd) : r.small ? i.t('smallSampleCap') : sort === 'density' ? i.one(r.density) : i.ord(r.percentile))
   const max = Math.max(...rows.filter((r) => sort === 'total' || !r.small).map(metric), 1)
   const shown = all ? rows.slice(0, scope === 'municipalities' ? 200 : rows.length) : rows.slice(0, 10)
   const top = rows[0]
   const full = compare.length >= MAX_COMPARE
-  const sentence = !top ? '' : sort === 'total' ? `${top.name} has the most detections so far this year, ${fmt.format(top.ytd)}.`
-    : sort === 'density' ? `${top.name} has the most fire for its size, ${dens.format(top.density)} detections per 1,000 km².`
-    : `${top.name} is furthest above its normal, at the ${ordinal(top.percentile)} percentile of previous years for this date.`
+  const sentence = !top ? '' : sort === 'total' ? i.t('rankTop', { name: top.name, year, n: i.int(top.ytd) })
+    : sort === 'density' ? i.t('rankDensity', { name: top.name, d: i.one(top.density) })
+    : i.t('rankNormal', { name: top.name, p: i.ord(top.percentile) })
 
   const download = () => {
     const lines = [
       `# Jangada Orbital ranking of ${scope}, data_version=${manifest.data_version}; through ${manifest.data_date}; sorted by ${sort}`,
       'rank,code,name,detections_so_far,area_km2,per_1000_km2,percentile',
       // plain numbers: a grouped "1,234.5" would split the CSV column
-      ...rows.map((r, i) => [i + 1, r.key.replace('bio:', ''), `"${r.name}"`, Math.round(r.ytd), Math.round(r.km2), r.density.toFixed(1), r.percentile].join(',')),
+      ...rows.map((r, k) => [k + 1, r.key.replace('bio:', ''), `"${r.name}"`, Math.round(r.ytd), Math.round(r.km2), r.density.toFixed(1), r.percentile].join(',')),
     ]
     downloadText(lines.join('\n') + '\n', `jangada-orbital_ranking_${scope}_${manifest.data_version.replaceAll('-', '')}_${sort}.csv`)
   }
 
-  const scopes = (Object.keys(SCOPE_LABEL) as RankScope[]).filter((s) => s === 'states' || (s === 'biomes' ? p.biomes : p.munis))
+  const scopes = (Object.keys(SCOPE_KEY) as RankScope[]).filter((s) => s === 'states' || (s === 'biomes' ? p.biomes : p.munis))
+  const scopeName = i.t(SCOPE_KEY[scope])
+  const sortItem = SORTS.find((s) => s.key === sort)!
 
   return (
     <section className="flex flex-col gap-3" aria-labelledby="rank-title">
-      <h2 id="rank-title" className="sr-only">Ranking of {SCOPE_LABEL[scope].toLowerCase()}</h2>
+      <h2 id="rank-title" className="sr-only">{i.t('rankTitle', { scope: scopeName.toLowerCase() })}</h2>
+      <p className="m-0 text-[15px] leading-normal">{sentence}</p>
       {scopes.length > 1 && (
-        <div className="flex gap-1 rounded-xl bg-surface-2 p-1" role="group" aria-label="Rank">
+        <div className="flex gap-1 rounded-xl bg-surface-2 p-1" role="group" aria-label={i.t('rankGroup')}>
           {scopes.map((s) => (
             <button key={s} type="button" aria-pressed={scope === s} onClick={() => { setScope(s); setAll(false) }}
-              className="min-h-11 flex-1 rounded-lg px-1 text-[13px] font-semibold text-ink-3 aria-pressed:bg-line aria-pressed:text-ink">
-              {SCOPE_LABEL[s]}
+              className="min-h-11 flex-1 rounded-[10px] px-1.5 text-[13px] font-semibold text-ink-3 aria-pressed:bg-seg-on aria-pressed:text-ink">
+              {i.t(SCOPE_KEY[s])}
             </button>
           ))}
         </div>
       )}
-      <p className="m-0 text-sm">{sentence}</p>
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Sort by">
-        <span className="text-[13px] text-ink-3">Sort by</span>
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label={i.t('sortBy')}>
+        <span className="text-[13px] text-ink-3">{i.t('sortBy')}</span>
         {SORTS.map((s) => (
           <button key={s.key} type="button" aria-pressed={sort === s.key} onClick={() => setSort(s.key)}
-            className="min-h-11 rounded-full border border-line px-3 text-[13px] font-medium text-ink-2 aria-pressed:border-brand aria-pressed:bg-brand/10 aria-pressed:text-ink">
+            className="min-h-11 rounded-full border border-line-2 px-3 text-[13px] font-semibold text-ink-2 aria-pressed:border-brand aria-pressed:bg-brand-soft aria-pressed:text-brand-soft-ink">
             {s.label}
           </button>
         ))}
       </div>
-      {!rows.length ? <p className="text-sm text-ink-2">Not enough history to rank yet.</p> : (
-        <div className={`overflow-x-auto rounded-xl border border-line ${all ? 'max-h-[520px] overflow-y-auto' : ''}`}>
-          <table className="w-full min-w-[320px] border-collapse text-sm tabular-nums">
-            <caption className="sr-only">{SCOPE_LABEL[scope]} by {SORTS.find((s) => s.key === sort)!.label.toLowerCase()}, this year through {manifest.data_date}</caption>
-            <thead className="sticky top-0 bg-surface text-left text-xs text-ink-3">
+      {!rows.length ? <p className="text-sm text-ink-2">{i.t('rankEmpty')}</p> : (
+        <div className={`overflow-x-auto rounded-xl border border-line ${all ? 'max-h-[470px] overflow-y-auto' : ''}`}>
+          <table className="w-full min-w-[300px] border-collapse text-sm tabular-nums">
+            <caption className="sr-only">{i.t('rankCaption', { scope: scopeName, sort: sortItem.label.toLowerCase(), date: manifest.data_date })}</caption>
+            <thead className="sticky top-0 z-[1] bg-surface text-left text-xs text-ink-3">
               <tr className="border-b border-line">
-                <th scope="col" className="w-11 py-2 pl-2 font-medium">Compare</th>
-                <th scope="col" className="w-7 py-2 font-medium">#</th>
-                <th scope="col" className="py-2 font-medium">{NOUN[scope]}</th>
-                <th scope="col" aria-sort="descending" className="w-28 py-2 pr-3 text-right font-medium">{SORTS.find((s) => s.key === sort)!.column}</th>
+                <th scope="col" className="w-11 py-2 pl-2 font-normal">{i.t('thCompare')}</th>
+                <th scope="col" className="w-7 py-2 font-normal">#</th>
+                <th scope="col" className="py-2 font-normal">{i.t('thArea')}</th>
+                <th scope="col" aria-sort="descending" className="w-[104px] py-2 pr-3 text-right font-normal">{sortItem.column}</th>
               </tr>
             </thead>
             <tbody>
-              {shown.map((r, i) => {
+              {shown.map((r, k) => {
                 const inCompare = compare.includes(r.key)
+                const sel = p.selected === r.key
                 return (
-                  <tr key={r.key} className={`border-b border-line/60 ${p.selected === r.key ? 'bg-brand/10 shadow-[inset_3px_0_0_var(--brand)]' : ''}`}>
+                  <tr key={r.key} className={`border-b border-row-line ${sel ? 'bg-brand-soft shadow-[inset_3px_0_0_var(--brand)]' : ''}`}>
                     <td className="pl-2">
                       {r.comparable ? (
                         <label className="flex size-11 cursor-pointer items-center justify-center">
                           <input type="checkbox" className="size-5 accent-[var(--brand)]" checked={inCompare} disabled={full && !inCompare}
-                            onChange={() => p.onToggleCompare(r.key)} aria-label={`Compare ${r.name}`} />
+                            onChange={() => p.onToggleCompare(r.key)} aria-label={i.t('compareName', { name: r.name })} />
                         </label>
                       ) : <span className="block size-11" />}
                     </td>
-                    <td className="text-ink-3">{i + 1}</td>
+                    <td className="text-ink-3">{k + 1}</td>
                     <td>
                       <button type="button" className="flex min-h-11 w-full flex-col items-start justify-center py-1 text-left" onClick={r.select}
-                        aria-label={`Select ${r.name} as the area`}>
-                        <span className="font-medium">{r.name}</span>
+                        aria-label={i.t('selectName', { name: r.name })}>
+                        <span className="font-semibold">{r.name}</span>
                         <span className="text-xs text-ink-3">
-                          {r.small ? (sort === 'total' ? 'small sample' : `${fmt.format(r.ytd)} so far`) : (
+                          {r.small ? (sort === 'total' ? i.t('smallSample') : i.t('nSoFar', { n: i.int(r.ytd) })) : (
                             <>
-                              {sort !== 'total' && `${fmt.format(r.ytd)} so far, `}
-                              {sort !== 'density' ? `${dens.format(r.density)} per 1,000 km²` : `${ordinal(r.percentile)} percentile`}
+                              {sort !== 'total' && `${i.t('nSoFar', { n: i.int(r.ytd) })}, `}
+                              {sort !== 'density' ? i.t('perKm2', { d: i.one(r.density) }) : i.t('pct', { p: i.ord(r.percentile) })}
                             </>
                           )}
                         </span>
@@ -173,7 +174,7 @@ export function RankingTable(p: Props) {
                       <div className="flex flex-col items-end gap-1">
                         <span className={r.small && sort !== 'total' ? 'text-xs text-ink-3' : undefined}>{value(r)}</span>
                         <span className="relative block h-1.5 w-full rounded-full bg-surface-2" aria-hidden="true">
-                          {!(r.small && sort !== 'total') && <span className="absolute inset-y-0 left-0 rounded-full bg-brand" style={{ width: `${Math.max(3, (metric(r) / max) * 100)}%` }} />}
+                          {!(r.small && sort !== 'total') && <span className={`absolute inset-y-0 left-0 rounded-full ${sel ? 'bg-link' : 'bg-brand'}`} style={{ width: `${Math.max(3, (metric(r) / max) * 100)}%` }} />}
                         </span>
                       </div>
                     </td>
@@ -184,13 +185,13 @@ export function RankingTable(p: Props) {
           </table>
         </div>
       )}
-      {full && <p className="m-0 text-[13px] text-ink-2">You can compare up to {MAX_COMPARE} areas. Clear one to add another.</p>}
-      {scope === 'municipalities' && <p className="m-0 text-xs text-ink-3">Municipalities are counted on the 0.1° cells whose centre falls inside them; very small ones may have none. Fewer than {SMALL_SAMPLE} detections so far is a small sample: those go last by density and against normal. Selecting one loads it as an area.</p>}
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" className="h-11 text-sm" aria-expanded={all} onClick={() => setAll(!all)}>
-          {all ? 'Show top 10' : scope === 'municipalities' ? 'Show top 200' : `Show all ${rows.length}`}
-        </Button>
-        <Button variant="outline" className="h-11 gap-2 text-sm" onClick={download}><Download aria-hidden="true" /> Download ranking CSV</Button>
+      {full && <p className="m-0 text-[13px] text-ink-2">{i.t('maxCompare', { n: MAX_COMPARE })}</p>}
+      {scope === 'municipalities' && <p className="m-0 text-xs text-ink-3">{i.t('muniNote', { n: SMALL_SAMPLE })}</p>}
+      <div className="touch flex flex-wrap gap-2">
+        <button type="button" className="btn !min-h-11 !rounded-[10px]" aria-expanded={all} onClick={() => setAll(!all)}>
+          {all ? i.t('showTop10') : scope === 'municipalities' ? i.t('showTop200') : i.t('showAll', { n: rows.length })}
+        </button>
+        <button type="button" className="btn !min-h-11 !rounded-[10px]" onClick={download}><Download size={18} aria-hidden="true" /> {i.t('downloadCsv')}</button>
       </div>
     </section>
   )

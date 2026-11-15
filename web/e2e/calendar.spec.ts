@@ -44,15 +44,17 @@ test('the ranking lists the states and a row selects the area', async ({ page })
   await expect(table.getByRole('row')).toHaveCount(28)
   await page.getByRole('button', { name: 'Per 1,000 km²' }).click()
   await table.getByRole('button', { name: 'Select Ceará as the area' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Ceará, Brazil' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Ceará' })).toBeVisible()
   await page.getByRole('checkbox', { name: 'Compare Pará' }).check()
   await page.getByRole('tab', { name: /so far$/ }).click()
   await expect(page.getByRole('heading', { level: 2, name: 'Compared, per 1,000 km²' })).toBeVisible()
 })
 
-test('the map shows this year against normal with a legend', async ({ page }) => {
+test('the map opens on fire recurrence and shows this year against normal with a legend', async ({ page }) => {
   await page.goto('./')
-  await expect(page.getByLabel('Map legend')).toContainText('This year so far vs the same date in past years', { timeout: 30_000 })
+  await expect(page.getByLabel('Map legend')).toContainText(/Years with fire, \d{4}–\d{4}/, { timeout: 30_000 })
+  await page.getByRole('radio', { name: 'This year vs normal' }).check()
+  await expect(page.getByLabel('Map legend')).toContainText(/\d{4} so far vs \d{4}–\d{4}, same date/)
   await page.getByRole('radio', { name: 'No data layer' }).check()
   await expect(page.getByLabel('Map legend')).toBeHidden()
 })
@@ -70,14 +72,13 @@ test('the CSV download holds the monthly series', async ({ page }) => {
 
 test('the Method page opens from the navigation', async ({ page }) => {
   await page.goto('./')
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Method' }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Method' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'How the harmonized calendar is made' })).toBeVisible()
 })
 
-test('"Why these numbers?" opens the harmonization chart and its table', async ({ page }) => {
-  await page.goto('./')
-  await page.getByRole('link', { name: 'Why these numbers?' }).click({ timeout: 30_000 })
-  const why = page.getByRole('region', { name: 'Why these numbers?' })
+test('the Method page shows the yearly totals chart and its table', async ({ page }) => {
+  await page.goto('./#why')
+  const why = page.getByRole('region', { name: 'Yearly totals since 2012' })
   await expect(why.getByRole('img', { name: /Yearly fire detections in Brazil/ })).toBeVisible()
   await expect(why.getByText(/VIIRS counts about \d+× more hotspots than Aqua/)).toBeVisible()
   await why.getByText('Show the numbers').click()
@@ -89,9 +90,10 @@ test('"Why these numbers?" opens the harmonization chart and its table', async (
 test('drawing a rectangle on the map loads that area', async ({ page }) => {
   await page.goto('./')
   await expect(page.getByRole('button', { name: 'Download CSV' })).toBeEnabled({ timeout: 30_000 })
-  // Outside hosts are blocked, so the map falls back to the offline style (~8 s) before drawing is ready.
+  // The design's map needs no outside host (the basemap is opt-in), so drawing is ready once the canvas is.
   await expect(page.locator('.maplibregl-canvas')).toBeVisible()
-  await page.waitForTimeout(9_000)
+  await page.waitForTimeout(1_500)
+  await page.getByRole('combobox', { name: 'Area' }).selectOption('drawn')
   await page.getByRole('button', { name: 'Rectangle' }).click()
   const box = (await page.locator('.maplibregl-canvas').boundingBox())!
   const cx = box.x + box.width / 2
@@ -104,24 +106,69 @@ test('drawing a rectangle on the map loads that area', async ({ page }) => {
   await expect(page.getByRole('table', { name: /Fire detections per month/ })).toBeVisible()
 })
 
-test('on a phone, the area sheet picks a state and closes', async ({ page }) => {
+test('on a phone, the area sheet picks a state and shows it on the map', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('./')
   await page.getByRole('button', { name: 'Area and layers' }).click()
   const sheet = page.getByRole('dialog', { name: 'Area and layers' })
   await expect(sheet).toBeVisible()
-  await sheet.getByRole('combobox', { name: 'Area' }).click()
-  await page.getByRole('option', { name: 'Ceará' }).click()
-  await expect(sheet).toBeHidden()
-  await expect(page.getByRole('heading', { level: 1, name: 'Ceará, Brazil' })).toBeVisible()
+  await sheet.getByRole('radio', { name: 'State' }).click()
+  const states = page.getByRole('dialog', { name: 'Choose a state' })
+  await states.getByRole('radio', { name: /^Ceará/ }).check()
+  await states.getByRole('button', { name: 'Show Ceará' }).click()
+  await expect(states).toBeHidden()
+  await expect(page.getByRole('heading', { level: 1, name: 'Ceará' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+})
+
+test('on a phone, a biome is picked from its own list', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Map layers' }).click({ timeout: 30_000 })
+  await page.getByRole('dialog', { name: 'Area and layers' }).getByRole('radio', { name: 'Biome' }).click()
+  const biomes = page.getByRole('dialog', { name: 'Choose a biome' })
+  await biomes.getByRole('radio', { name: /^Caatinga/ }).check()
+  await biomes.getByRole('button', { name: 'Show Caatinga' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Caatinga' })).toBeVisible()
+})
+
+test('on a phone, the orange box is dragged by a corner and taken as the area', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('./')
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible({ timeout: 30_000 })
+  await page.getByRole('button', { name: 'Map layers' }).click()
+  await page.getByRole('dialog', { name: 'Area and layers' }).getByRole('radio', { name: 'Draw an area on the map' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Drag the corners of the orange box' })).toBeVisible()
+  // the box spans 30%–70% of the visible map; drag its lower-right corner further out
+  const box = (await page.locator('.maplibregl-canvas').boundingBox())!
+  const top = 80, bottom = box.height - 96 - 16
+  const corner = { x: box.x + box.width * 0.7, y: box.y + top + (bottom - top) * 0.7 }
+  await page.mouse.move(corner.x, corner.y)
+  await page.mouse.down()
+  await page.mouse.move(corner.x + 40, corner.y + 30, { steps: 6 })
+  await page.mouse.up()
+  await page.getByRole('button', { name: 'Use this area' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Drawn area' })).toBeVisible({ timeout: 30_000 })
+})
+
+test('the interface switches to Portuguese and remembers it', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('combobox', { name: 'Language' }).selectOption('pt')
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Calendário' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /até agora$/ })).toBeVisible()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'pt-BR')
+  await page.reload()
+  await expect(page.getByRole('heading', { level: 1, name: 'Brasil' })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/até agora: [\d,]+ mil detecções/)).toBeVisible()
 })
 
 test('on a tablet, drawing closes the filters and the map shows how to draw and how to cancel', async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 1024 })
   await page.goto('./')
   await page.getByRole('button', { name: 'Area and layers' }).click({ timeout: 30_000 })
-  await page.getByRole('dialog', { name: 'Area and layers' }).getByRole('button', { name: 'Rectangle' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Area and layers' })
+  await drawer.getByRole('combobox', { name: 'Area' }).selectOption('drawn')
+  await drawer.getByRole('button', { name: 'Rectangle' }).click()
   await expect(page.getByRole('dialog', { name: 'Area and layers' })).toBeHidden()
   const hint = page.getByRole('status').filter({ hasText: 'Tap two opposite corners on the map.' })
   await expect(hint).toBeVisible()
@@ -135,7 +182,9 @@ test('on a phone, an area that fails to load says so instead of loading forever'
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('./')
   await page.getByRole('button', { name: 'Area and layers' }).first().click({ timeout: 30_000 })
-  await page.getByRole('dialog', { name: 'Area and layers' }).getByRole('button', { name: /Use lat, lon, radius/ }).click()
+  const sheet = page.getByRole('dialog', { name: 'Area and layers' })
+  await sheet.getByText('Or type a point and radius').click()
+  await sheet.getByRole('button', { name: /Use lat, lon, radius/ }).click()
   await expect(page.getByRole('alert').filter({ hasText: 'Could not load this area' })).toBeVisible()
   await page.getByRole('button', { name: 'Fire calendar' }).click()
   await expect(page.getByRole('alert').filter({ hasText: 'Could not load this area' })).toBeVisible()
@@ -156,9 +205,10 @@ test('on a phone, the data drawer opens the calendar and every tab fits the widt
 
 test('a biome is an area and the new map layers show their legends', async ({ page }) => {
   await page.goto('./')
-  await page.getByRole('combobox', { name: 'Area' }).click({ timeout: 30_000 })
-  await page.getByRole('option', { name: 'Pantanal' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Pantanal (biome)' })).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Area' })).toBeVisible({ timeout: 30_000 })
+  await page.getByRole('combobox', { name: 'Area' }).selectOption('biome')
+  await page.getByRole('combobox', { name: 'Biome, IBGE limits' }).selectOption({ label: 'Pantanal' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Pantanal' })).toBeVisible()
   await expect(page.getByRole('table', { name: /Fire detections per month/ })).toBeVisible()
   await page.getByRole('radio', { name: /Fire recurrence/ }).check()
   await expect(page.getByLabel('Map legend')).toContainText(/Years with fire, \d{4}–\d{4}/)

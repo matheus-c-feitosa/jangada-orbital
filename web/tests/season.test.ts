@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { describeOffset, seasonRhythm } from '../src/calendar/season'
+import { describeOffset, runningSeason, seasonRhythm } from '../src/calendar/season'
 
 /** Monthly series from Jan of `from` to Dec of `to`, with `profile(year, month)` detections. */
 function series(from: number, to: number, profile: (y: number, m: number) => number) {
@@ -50,5 +50,23 @@ describe('fire-season rhythm', () => {
     const { months, values } = series(2001, 2003, (y, m) => (y === 2002 && m === 9 ? 5 : m === 9 ? 100 : 0))
     const r = seasonRhythm(months.slice(0, -1), values.slice(0, -1)) // last month missing: 2003 incomplete
     expect(r.seasons.map((s) => s.year)).toEqual([2001])
+  })
+
+  test('the running season is placed against the usual season total, the last month pro rata', () => {
+    // seasons Mar–Feb (the calmest month is March); 2020/21 runs, with data to 15 September 2020
+    const { months, values } = series(2001, 2020, (_, m) => ({ 8: 100, 9: 100 } as Record<number, number>)[m] ?? (m === 3 ? 0 : 1))
+    const cut = months.indexOf('2020-09') + 1
+    const run = runningSeason(months.slice(0, cut), values.slice(0, cut), 3, '2020-09', 15, 210)
+    expect(run?.label).toBe('2020/21')
+    expect(run?.now).toBeCloseTo(6.5) // March is offset 0, so mid-September is 6.5
+    // Apr–Jul add 4; 10% of 210 = 21 is reached 17% into August (offset 5)
+    expect(run?.start).toBeCloseTo(5.17, 2)
+    // 50% = 105: 104 by the end of August, then 1 of September's 100 over its first half month
+    expect(run?.middle).toBeCloseTo(6.005, 3)
+  })
+
+  test('describeOffset speaks Portuguese when given the words', () => {
+    const months = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+    expect(describeOffset(9.5, 1, { early: 'início de', mid: 'meados de', late: 'fim de', month: (k) => months[k] })).toBe('meados de outubro')
   })
 })

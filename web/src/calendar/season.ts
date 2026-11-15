@@ -100,10 +100,69 @@ export function seasonRhythm(months: string[], values: number[]): SeasonRhythm {
 
 const NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
-/** "mid-August" for a fractional offset within a season that starts in `firstMonth`. */
-export function describeOffset(offset: number, firstMonth: number): string {
+export interface OffsetWords {
+  early: string
+  mid: string
+  late: string
+  month: (k: number) => string
+}
+const ENGLISH: OffsetWords = { early: 'early', mid: 'mid', late: 'late', month: (k) => NAMES[k] }
+
+/** "mid August" ("meados de agosto") for a fractional offset within a season that starts in `firstMonth`. */
+export function describeOffset(offset: number, firstMonth: number, words: OffsetWords = ENGLISH): string {
   const k = Math.min(11, Math.floor(offset))
   const part = offset - k
-  const name = NAMES[(firstMonth - 1 + k) % 12]
-  return `${part < 1 / 3 ? 'early' : part < 2 / 3 ? 'mid' : 'late'} ${name}`
+  const name = words.month((firstMonth - 1 + k) % 12)
+  return `${part < 1 / 3 ? words.early : part < 2 / 3 ? words.mid : words.late} ${name}`
+}
+
+export interface RunningSeason {
+  label: string
+  year: number
+  /** offsets from the season's first month: when it reached 10% and 50% of a usual season (null = not yet), and today */
+  start: number | null
+  middle: number | null
+  now: number
+}
+
+/**
+ * The season that contains the newest month, still running. Its total is not known yet, so its start and middle are
+ * the moments it reached 10% and 50% of the usual (median) season total.
+ */
+export function runningSeason(months: string[], values: number[], firstMonth: number, lastMonth: string, days: number, usualTotal: number): RunningSeason | null {
+  if (!(usualTotal > 0)) return null
+  const byMonth = new Map(months.map((m, i) => [m.slice(0, 7), values[i]]))
+  const ly = Number(lastMonth.slice(0, 4))
+  const lm = Number(lastMonth.slice(5, 7))
+  const year = lm >= firstMonth ? ly : ly - 1
+  const vals: number[] = []
+  for (let k = 0; k < 12; k++) {
+    const m = ((firstMonth - 1 + k) % 12) + 1
+    const yy = year + (firstMonth - 1 + k >= 12 ? 1 : 0)
+    const key = `${yy}-${String(m).padStart(2, '0')}`
+    const v = byMonth.get(key)
+    if (v === undefined) return null
+    vals.push(v)
+    if (key === lastMonth) break
+  }
+  const dim = new Date(Date.UTC(ly, lm, 0)).getUTCDate()
+  const now = vals.length - 1 + Math.min(1, days / dim)
+  // the last month is partial: spread its count over the days it covers
+  const reach = (share: number) => {
+    const target = usualTotal * share
+    let cum = 0
+    for (let k = 0; k < vals.length; k++) {
+      const span = k === vals.length - 1 ? now - k : 1
+      if (vals[k] > 0 && cum + vals[k] >= target) return k + ((target - cum) / vals[k]) * span
+      cum += vals[k]
+    }
+    return null
+  }
+  return {
+    label: firstMonth === 1 ? String(year) : `${year}/${String((year + 1) % 100).padStart(2, '0')}`,
+    year,
+    start: reach(0.1),
+    middle: reach(0.5),
+    now,
+  }
 }

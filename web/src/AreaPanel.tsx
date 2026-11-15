@@ -1,27 +1,75 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Crosshair, Download, Pentagon, RectangleHorizontal } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { SATELLITES, type AppData, type Satellite } from './data/load'
 import { circleRing, type Ring } from './geo/aoi'
-import type { BiomeInfo } from './data/extras'
+import type { BiomeInfo, MuniRanking } from './data/extras'
 import type { DrawMode, MapLayer } from './map/MapView'
+import { useI18n, type Key } from './i18n'
 
-export type Area = { kind: 'country' } | { kind: 'state'; uf: string } | { kind: 'biome'; id: string } | { kind: 'ring'; ring: Ring; label: string }
+/** A ring is a drawn shape, a point and radius, or a municipality outline: `origin` says which. */
+export type Area =
+  | { kind: 'country' }
+  | { kind: 'state'; uf: string }
+  | { kind: 'biome'; id: string }
+  | { kind: 'ring'; ring: Ring; label: string; origin: 'draw' | 'circle' | 'muni'; circle?: { lat: number; lon: number; km: number } }
 export type View = 'harmonized' | 'observed'
+export type AreaKind = 'brazil' | 'biome' | 'state' | 'muni' | 'drawn'
 
 export const SAT_LABEL: Record<Satellite, string> = {
   Terra: 'Terra (MODIS)', Aqua: 'Aqua (MODIS)', 'S-NPP': 'Suomi NPP (VIIRS)', 'NOAA-20': 'NOAA-20 (VIIRS)', 'NOAA-21': 'NOAA-21 (VIIRS)',
 }
 
-const card = 'flex flex-col gap-4 rounded-xl border border-line bg-surface p-4'
-const field = 'flex flex-col gap-1.5'
-const label = 'text-[13px] font-medium text-ink-2'
-const toggleOn = 'h-10 flex-1 text-ink-2 data-[state=on]:border-brand data-[state=on]:bg-brand/10 data-[state=on]:text-ink data-[state=on]:font-semibold'
-const tall = 'h-10 flex-1 gap-2 text-sm data-[active=true]:border-brand data-[active=true]:shadow-[inset_0_0_0_1px_var(--brand)]'
+export const KIND_KEY: Record<AreaKind, Key> = { brazil: 'kindBrazil', biome: 'kindBiome', state: 'kindState', muni: 'kindMuni', drawn: 'kindDrawn' }
+
+export const kindOf = (a: Area): AreaKind =>
+  a.kind === 'country' ? 'brazil' : a.kind === 'state' ? 'state' : a.kind === 'biome' ? 'biome' : a.origin === 'muni' ? 'muni' : 'drawn'
+
+/** The first area of a kind, when the kind changes: the design opens on Caatinga and Ceará. */
+export function defaultArea(kind: 'biome' | 'state', data: AppData, biomes: BiomeInfo[]): Area | null {
+  if (kind === 'biome') {
+    const b = biomes.find((x) => x.id === 'caatinga') ?? biomes[0]
+    return b ? { kind: 'biome', id: b.id } : null
+  }
+  const s = data.stateList.find((x) => x.uf === 'CE') ?? data.stateList[0]
+  return s ? { kind: 'state', uf: s.uf } : null
+}
+
+/** Municipality search: "Iguatu, CE" → its row, for an <input list> with a datalist. */
+export function useMuniIndex(munis: MuniRanking | null) {
+  return useMemo(() => {
+    const byLabel = new Map<string, [string, string, string]>()
+    for (const [id, name, uf] of munis?.rows ?? []) byLabel.set(`${name}, ${uf}`, [id, uf, name])
+    return { byLabel, labels: [...byLabel.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR')) }
+  }, [munis])
+}
+
+/** Point and radius: an extra way to draw an area (lat, lon, km). */
+export function CircleForm({ onArea }: { onArea: (a: Area) => void }) {
+  const i = useI18n()
+  const [circle, setCircle] = useState({ lat: '-7.23', lon: '-39.31', km: '30' })
+  const [error, setError] = useState<string | null>(null)
+  const num = (s: string) => Number(s.replace(',', '.'))
+  const apply = () => {
+    const lat = num(circle.lat), lon = num(circle.lon), km = num(circle.km)
+    if (!Number.isFinite(lat) || lat < -34 || lat > 6) return setError(i.t('errLat'))
+    if (!Number.isFinite(lon) || lon < -74.5 || lon > -28) return setError(i.t('errLon'))
+    if (!Number.isFinite(km) || km < 5 || km > 500) return setError(i.t('errKm'))
+    setError(null)
+    onArea({ kind: 'ring', ring: circleRing(lat, lon, km), label: `${km} km, ${lat.toFixed(2)}°, ${lon.toFixed(2)}°`, origin: 'circle', circle: { lat, lon, km } })
+  }
+  return (
+    <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); apply() }}>
+      <span className="text-xs text-ink-3">{i.t('orPoint')}</span>
+      <div className="grid grid-cols-[1fr_1fr_0.8fr] gap-2">
+        <input className="ctl" aria-label={i.t('latitude')} inputMode="decimal" value={circle.lat} onChange={(e) => setCircle({ ...circle, lat: e.target.value })} />
+        <input className="ctl" aria-label={i.t('longitude')} inputMode="decimal" value={circle.lon} onChange={(e) => setCircle({ ...circle, lon: e.target.value })} />
+        <input className="ctl" aria-label={i.t('radiusKm')} inputMode="decimal" value={circle.km} onChange={(e) => setCircle({ ...circle, km: e.target.value })} />
+      </div>
+      <button type="submit" className="btn"><Crosshair size={16} aria-hidden="true" /> {i.t('useCircle')}</button>
+      {error && <p className="m-0 text-[13px] text-unusual" role="alert">{error}</p>}
+    </form>
+  )
+}
 
 interface Props {
   data: AppData
@@ -33,8 +81,14 @@ interface Props {
   onLayer: (layer: MapLayer) => void
   /** IBGE biomes, once biomes.geojson has loaded */
   biomes: BiomeInfo[]
+  munis: MuniRanking | null
+  onPickMuni: (id: string, uf: string, name: string) => void
   biomeBorders: boolean
   onBiomeBorders: (on: boolean) => void
+  stateBorders: boolean
+  onStateBorders: (on: boolean) => void
+  places: boolean
+  onPlaces: (on: boolean) => void
   /** recurrence: years available and the chosen period */
   recurrenceYears: [number, number] | null
   period: [number, number]
@@ -51,161 +105,184 @@ interface Props {
   onRange: (from: number, to: number) => void
   canDownload: boolean
   onDownload: () => void
+  /** "About this area" lines (desktop); the tablet shows them beside the data instead */
+  about?: ReactNode
+  /** tablet drawer: 48 px controls, biomes as radio buttons, no download button (it sits beside the data) */
+  touch?: boolean
 }
 
-/** Area, map layers, values and range. A sidebar on desktop, a side drawer on tablets and a full sheet on phones. */
+/** Area, values, years and map layers: the left column on desktop, a side drawer on tablets (design "UI - PC"). */
 export function AreaPanel(p: Props) {
-  const [circle, setCircle] = useState({ lat: '-7.23', lon: '-39.31', km: '30' })
-  const [circleError, setCircleError] = useState<string | null>(null)
+  const i = useI18n()
+  const derived = kindOf(p.area)
+  // Municipality and Drawn area show their controls before an area of that kind exists.
+  const [pending, setPending] = useState<AreaKind | null>(null)
+  useEffect(() => setPending(null), [p.area])
+  const kind = pending ?? derived
+  const muni = useMuniIndex(p.munis)
+  const [muniText, setMuniText] = useState(p.area.kind === 'ring' && p.area.origin === 'muni' ? p.area.label : '')
 
-  const applyCircle = () => {
-    const lat = Number(circle.lat), lon = Number(circle.lon), km = Number(circle.km)
-    if (!Number.isFinite(lat) || lat < -34 || lat > 6) return setCircleError('Latitude must be between -34 and 6 (Brazil).')
-    if (!Number.isFinite(lon) || lon < -74.5 || lon > -28) return setCircleError('Longitude must be between -74.5 and -28 (Brazil).')
-    if (!Number.isFinite(km) || km < 5 || km > 500) return setCircleError('Radius must be between 5 and 500 km.')
-    setCircleError(null)
-    p.onArea({ kind: 'ring', ring: circleRing(lat, lon, km), label: `${km} km around ${lat.toFixed(2)}°, ${lon.toFixed(2)}°` })
+  const pickKind = (k: AreaKind) => {
+    if (k === 'brazil') return p.onArea({ kind: 'country' })
+    if (k === 'biome' || k === 'state') {
+      const a = derived === k ? p.area : defaultArea(k, p.data, p.biomes)
+      if (a) p.onArea(a)
+      return
+    }
+    setPending(k)
   }
-
-  const areaValue = p.area.kind === 'state' ? p.area.uf : p.area.kind === 'country' ? 'BR' : p.area.kind === 'biome' ? `bio:${p.area.id}` : 'ring'
-  const pick = (v: string) => {
-    if (v === 'ring') return
-    if (v === 'BR') return p.onArea({ kind: 'country' })
-    if (v.startsWith('bio:')) return p.onArea({ kind: 'biome', id: v.slice(4) })
-    p.onArea({ kind: 'state', uf: v })
+  const onMuniText = (text: string) => {
+    setMuniText(text)
+    const hit = muni.byLabel.get(text)
+    if (hit) p.onPickMuni(hit[0], hit[1], hit[2])
   }
+  const yearsFor = p.recurrenceYears ? Array.from({ length: p.recurrenceYears[1] - p.recurrenceYears[0] + 1 }, (_, k) => p.recurrenceYears![0] + k) : []
   const layers: [MapLayer, string, string | null][] = [
-    ['normal', 'This year vs normal, by state', null],
-    ['recurrence', 'Fire recurrence', p.recurrenceYears ? null : 'not published yet'],
-    ['recent', 'Detections, last 7 days', p.recentSpan ?? 'not published yet'],
-    ['none', 'No data layer', null],
+    ['recurrence', i.t('layerRecurrence'), p.recurrenceYears ? null : i.t('notPublished')],
+    ['normal', i.t('layerNormal'), null],
+    ['recent', i.t('layerRecent'), p.recentSpan ?? i.t('notPublished')],
+    ['none', i.t('layerNone'), null],
   ]
-  const yearsFor = p.recurrenceYears ? Array.from({ length: p.recurrenceYears[1] - p.recurrenceYears[0] + 1 }, (_, i) => p.recurrenceYears![0] + i) : []
+  const sub = 'text-[13px] text-ink-3'
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className={card}>
-        <div className={field}>
-          <Label htmlFor="area" className={label}>Area</Label>
-          <Select value={areaValue} onValueChange={pick}>
-            <SelectTrigger id="area" className="h-10 w-full bg-surface-2"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {p.area.kind === 'ring' && <SelectItem value="ring">{p.area.label}</SelectItem>}
-              <SelectItem value="BR">Brazil (all states)</SelectItem>
-              {p.biomes.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel>Biomes (IBGE)</SelectLabel>
-                  {p.biomes.map((b) => <SelectItem key={b.id} value={`bio:${b.id}`}>{b.name}</SelectItem>)}
-                </SelectGroup>
-              )}
-              <SelectGroup>
-                <SelectLabel>States</SelectLabel>
-                {p.data.stateList.map((s) => <SelectItem key={s.uf} value={s.uf}>{s.name}</SelectItem>)}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <p className="m-0 text-xs text-ink-3">Municipalities: pick one in the Ranking tab.</p>
-        </div>
+    <div className={`flex min-h-full flex-col gap-5 ${p.touch ? 'touch gap-6' : ''}`}>
+      <div className="flex flex-col gap-2">
+        <label className="lbl" htmlFor="area-kind">{i.t('area')}</label>
+        <select id="area-kind" className="ctl" value={kind} onChange={(e) => pickKind(e.target.value as AreaKind)}>
+          {(Object.keys(KIND_KEY) as AreaKind[]).filter((k) => (k === 'biome' ? p.biomes.length : k === 'muni' ? p.munis : true))
+            .map((k) => <option key={k} value={k}>{i.t(KIND_KEY[k])}</option>)}
+        </select>
 
-        <div className={field}>
-          <span className={label} id="draw-label">Or draw on the map</span>
-          <div className="flex gap-2" role="group" aria-labelledby="draw-label">
-            {(['rectangle', 'polygon'] as const).map((mode) => (
-              <Button key={mode} variant="outline" className={tall} aria-pressed={p.drawMode === mode}
-                data-active={p.drawMode === mode || undefined}
-                onClick={() => p.onDrawMode(p.drawMode === mode ? 'none' : mode)}>
-                {mode === 'rectangle' ? <RectangleHorizontal aria-hidden="true" /> : <Pentagon aria-hidden="true" />}
-                {mode === 'rectangle' ? 'Rectangle' : 'Polygon'}
-              </Button>
+        {kind === 'biome' && (p.touch ? (
+          <fieldset className="m-0 mt-1 flex flex-col border-0 p-0">
+            <legend className={`${sub} mb-1 p-0`}>{i.t('biomeIbge')}</legend>
+            {p.biomes.map((b) => (
+              <label key={b.id} className="opt">
+                <input type="radio" name="biome" checked={p.area.kind === 'biome' && p.area.id === b.id} onChange={() => p.onArea({ kind: 'biome', id: b.id })} />{b.name}
+              </label>
             ))}
-          </div>
-          {p.drawMode !== 'none' && (
-            <p className="m-0 text-[13px] text-ink-3">
-              {p.drawMode === 'rectangle' ? 'Click two opposite corners on the map.' : 'Click each corner; click the first point to close.'}
+          </fieldset>
+        ) : (
+          <>
+            <label className={sub} htmlFor="area-biome">{i.t('biomeIbge')}</label>
+            <select id="area-biome" className="ctl" value={p.area.kind === 'biome' ? p.area.id : ''} onChange={(e) => p.onArea({ kind: 'biome', id: e.target.value })}>
+              {p.biomes.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </>
+        ))}
+        {kind === 'state' && (
+          <>
+            <label className={sub} htmlFor="area-state">{i.t('kindState')}</label>
+            <select id="area-state" className="ctl" value={p.area.kind === 'state' ? p.area.uf : ''} onChange={(e) => p.onArea({ kind: 'state', uf: e.target.value })}>
+              {p.data.stateList.map((s) => <option key={s.uf} value={s.uf}>{s.name}</option>)}
+            </select>
+          </>
+        )}
+        {kind === 'muni' && (
+          <>
+            <label className={sub} htmlFor="area-muni">{i.t('kindMuni')}</label>
+            <input id="area-muni" className="ctl" type="search" list="muni-names" placeholder={i.t('typeMuni')} autoComplete="off"
+              value={muniText} onChange={(e) => onMuniText(e.target.value)} />
+            <datalist id="muni-names">{muni.labels.map((l) => <option key={l} value={l} />)}</datalist>
+          </>
+        )}
+        {kind === 'drawn' && (
+          <>
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label={i.t('drawOnMap')}>
+              {(['rectangle', 'polygon'] as const).map((mode) => (
+                <button key={mode} type="button" className="btn" aria-pressed={p.drawMode === mode}
+                  onClick={() => p.onDrawMode(p.drawMode === mode ? 'none' : mode)}>
+                  {mode === 'rectangle' ? <RectangleHorizontal size={16} aria-hidden="true" /> : <Pentagon size={16} aria-hidden="true" />}
+                  {i.t(mode)}
+                </button>
+              ))}
+            </div>
+            <p className={`m-0 ${sub}`}>
+              {p.drawMode === 'rectangle' ? i.t('clickRect') : p.drawMode === 'polygon' ? i.t('clickPoly') : i.t('pickShape')}
             </p>
-          )}
-        </div>
-
-        <form className={field} onSubmit={(e) => { e.preventDefault(); applyCircle() }}>
-          <span className={label}>Or a point and radius</span>
-          <div className="grid grid-cols-[1fr_1fr_0.8fr] gap-2">
-            <Input className="h-10 bg-surface-2 tabular-nums" aria-label="Latitude" inputMode="decimal" value={circle.lat} onChange={(e) => setCircle({ ...circle, lat: e.target.value })} />
-            <Input className="h-10 bg-surface-2 tabular-nums" aria-label="Longitude" inputMode="decimal" value={circle.lon} onChange={(e) => setCircle({ ...circle, lon: e.target.value })} />
-            <Input className="h-10 bg-surface-2 tabular-nums" aria-label="Radius in km" inputMode="decimal" value={circle.km} onChange={(e) => setCircle({ ...circle, km: e.target.value })} />
-          </div>
-          <Button type="submit" variant="outline" className="h-10 gap-2 text-sm"><Crosshair aria-hidden="true" /> Use lat, lon, radius (km)</Button>
-          {circleError && <p className="m-0 text-[13px] text-unusual" role="alert">{circleError}</p>}
-        </form>
+            <CircleForm onArea={p.onArea} />
+          </>
+        )}
       </div>
 
+      {p.about && (
+        <section aria-label={i.t('aboutTitle')} className="flex flex-col gap-1.5 rounded-[10px] border border-line bg-panel p-3.5 text-[13px] leading-[1.45] text-ink-2">
+          <p className="m-0 font-semibold text-ink">{i.t('aboutTitle')}</p>
+          {p.about}
+        </section>
+      )}
 
-      <fieldset className={card + ' m-0'}>
-        <legend className="sr-only">Map layers</legend>
-        <span className={label} aria-hidden="true">Map layers</span>
-        <div className={field}>
-          <span className="text-xs text-ink-3">Data on the map, one at a time</span>
-          {layers.map(([v, text, note]) => (
-            <div key={v} className="flex flex-col">
-              <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
-                <input type="radio" name="map-layer" className="size-5 accent-[var(--brand)]" checked={p.layer === v} onChange={() => p.onLayer(v)} />
-                <span className="flex flex-col leading-tight">{text}{note && <span className="text-xs text-ink-3">{note}</span>}</span>
-              </label>
-              {v === 'recurrence' && p.layer === 'recurrence' && p.recurrenceYears && (
-                <div className="flex items-center gap-2 pb-1 pl-8 text-xs text-ink-2">
-                  <Select value={String(p.period[0])} onValueChange={(f) => p.onPeriod([Math.min(Number(f), p.period[1]), p.period[1]])}>
-                    <SelectTrigger aria-label="Recurrence from year" className="h-9 w-[84px] bg-surface-2 tabular-nums"><SelectValue /></SelectTrigger>
-                    <SelectContent>{yearsFor.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-                  </Select>
-                  to
-                  <Select value={String(p.period[1])} onValueChange={(t) => p.onPeriod([p.period[0], Math.max(Number(t), p.period[0])])}>
-                    <SelectTrigger aria-label="Recurrence to year" className="h-9 w-[84px] bg-surface-2 tabular-nums"><SelectValue /></SelectTrigger>
-                    <SelectContent>{yearsFor.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-          ))}
-          <span className="mt-2 text-xs text-ink-3">Borders</span>
-          <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
-            <input type="checkbox" className="size-5 accent-[var(--brand)]" checked={p.biomeBorders} disabled={!p.biomes.length}
-              onChange={(e) => p.onBiomeBorders(e.target.checked)} />
-            Biome borders
-          </label>
+      <div className="flex flex-col gap-2">
+        <p className="lbl" id="values-label">{i.t('values')}</p>
+        <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="values-label">
+          <button type="button" className="btn" aria-pressed={p.view === 'harmonized'} onClick={() => p.onView('harmonized')}>{i.t('harmonized')}</button>
+          <button type="button" className="btn" aria-pressed={p.view === 'observed'} onClick={() => p.onView('observed')}>{i.t('observed')}</button>
         </div>
+        {p.view === 'observed' && (
+          <select className="ctl" aria-label={i.t('satellite')} value={p.sat} onChange={(e) => p.onSat(e.target.value as Satellite)}>
+            {SATELLITES.map((s) => <option key={s} value={s}>{SAT_LABEL[s]}</option>)}
+          </select>
+        )}
+        {p.touch && <span className="text-xs leading-snug text-ink-3">{i.t('harmonizedHelp')}</span>}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <p className="lbl">{i.t('years')}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <select className="ctl" aria-label={i.t('fromYear')} value={p.fromYear} onChange={(e) => p.onRange(Math.min(Number(e.target.value), p.toYear), p.toYear)}>
+            {p.years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <select className="ctl" aria-label={i.t('toYear')} value={p.toYear} onChange={(e) => p.onRange(p.fromYear, Math.max(Number(e.target.value), p.fromYear))}>
+            {p.years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
+        <legend className="lbl mb-2 p-0">{i.t('mapLayers')}</legend>
+        <span className="text-xs text-ink-3">{i.t('oneAtATime')}</span>
+        {layers.map(([v, text, note]) => (
+          <div key={v} className="flex flex-col">
+            <label className="opt">
+              <input type="radio" name="map-layer" checked={p.layer === v} onChange={() => p.onLayer(v)} />
+              <span className="flex flex-col leading-tight">{text}{note && <span className="text-xs text-ink-3">{note}</span>}</span>
+            </label>
+            {v === 'recurrence' && p.layer === 'recurrence' && p.recurrenceYears && (
+              <div className="flex items-center gap-1.5 pb-1 pl-7 text-xs text-ink-2">
+                <select className="ctl !h-8 !w-[76px] !px-1.5 !text-xs" aria-label={i.t('recFrom')} value={p.period[0]}
+                  onChange={(e) => p.onPeriod([Math.min(Number(e.target.value), p.period[1]), p.period[1]])}>
+                  {yearsFor.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <span>{i.t('to')}</span>
+                <select className="ctl !h-8 !w-[76px] !px-1.5 !text-xs" aria-label={i.t('recTo')} value={p.period[1]}
+                  onChange={(e) => p.onPeriod([p.period[0], Math.max(Number(e.target.value), p.period[0])])}>
+                  {yearsFor.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+        ))}
+        <span className="mt-1.5 text-xs text-ink-3">{i.t('borders')}</span>
+        <label className="opt">
+          <input type="checkbox" checked={p.biomeBorders} disabled={!p.biomes.length} onChange={(e) => p.onBiomeBorders(e.target.checked)} />{i.t('biomeBorders')}
+        </label>
+        <label className="opt">
+          <input type="checkbox" checked={p.stateBorders} onChange={(e) => p.onStateBorders(e.target.checked)} />{i.t('stateBorders')}
+        </label>
+        <label className="opt">
+          <input type="checkbox" checked={p.places} onChange={(e) => p.onPlaces(e.target.checked)} />{i.t('places')}
+        </label>
       </fieldset>
 
-      <div className={card}>
-        <div className={field}>
-          <span className={label} id="view-label">Values</span>
-          <ToggleGroup type="single" variant="outline" value={p.view} aria-labelledby="view-label" className="w-full"
-            onValueChange={(v) => v && p.onView(v as View)}>
-            <ToggleGroupItem value="harmonized" className={toggleOn}>Harmonized</ToggleGroupItem>
-            <ToggleGroupItem value="observed" className={toggleOn}>Observed</ToggleGroupItem>
-          </ToggleGroup>
-          {p.view === 'observed' && (
-            <Select value={p.sat} onValueChange={(v) => p.onSat(v as Satellite)}>
-              <SelectTrigger aria-label="Satellite" className="h-10 w-full bg-surface-2"><SelectValue /></SelectTrigger>
-              <SelectContent>{SATELLITES.map((s) => <SelectItem key={s} value={s}>{SAT_LABEL[s]}</SelectItem>)}</SelectContent>
-            </Select>
-          )}
-        </div>
-        <div className={field}>
-          <span className={label}>Years</span>
-          <div className="flex gap-2">
-            <Select value={String(p.fromYear)} onValueChange={(v) => p.onRange(Math.min(Number(v), p.toYear), p.toYear)}>
-              <SelectTrigger aria-label="From year" className="h-10 flex-1 bg-surface-2 tabular-nums"><SelectValue /></SelectTrigger>
-              <SelectContent>{p.years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-            </Select>
-            <Select value={String(p.toYear)} onValueChange={(v) => p.onRange(p.fromYear, Math.max(Number(v), p.fromYear))}>
-              <SelectTrigger aria-label="To year" className="h-10 flex-1 bg-surface-2 tabular-nums"><SelectValue /></SelectTrigger>
-              <SelectContent>{p.years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-        </div>
-        <Button className="h-10 gap-2 text-sm" onClick={p.onDownload} disabled={!p.canDownload}>
-          <Download aria-hidden="true" /> Download CSV
-        </Button>
-      </div>
+      {!p.touch && (
+        <>
+          <div className="grow" />
+          <button type="button" className="btn main" onClick={p.onDownload} disabled={!p.canDownload}>
+            <Download size={16} strokeWidth={2.2} aria-hidden="true" /> {i.t('downloadCsv')}
+          </button>
+        </>
+      )}
     </div>
   )
 }

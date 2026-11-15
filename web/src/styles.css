@@ -5,32 +5,68 @@
 /* Dark theme is chosen by <html data-theme>, not by a .dark class. */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
-/* Jangada Orbital tokens: the single source of truth for both themes. Fire data uses one orange ramp ordered by
-   lightness (colorblind-safe); "unusual" is red and always paired with an icon and text. */
+/* Jangada Orbital tokens: the single source of truth for both themes. The dark theme is the design reference
+   ("Jangada Orbital — nova UI" canvas): navy ground, one orange accent, Archivo. Fire data uses one orange ramp
+   ordered by lightness (colorblind-safe); "unusual" is a rose dot and always paired with text. */
 :root,
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #0b1220;
-  --surface: #111a2e;
-  --surface-2: #17223a;
-  --line: #24314d;
-  --ink: #e7edf6;
-  --ink-2: #b0bccf;
-  --ink-3: #8794ab;
+  --bg: #0c1424;
+  --surface: #0f1a2e;
+  --surface-2: #16233c;
+  /* readout boxes and the "About this area" card */
+  --panel: #13203a;
+  --line: #22304c;
+  /* borders of controls and buttons */
+  --line-2: #2a3a5a;
+  --row-line: #1b2843;
+  --ink: #e7ecf5;
+  --ink-2: #c9d3e3;
+  --ink-3: #9aa8c0;
   --brand: #f97316;
-  --brand-ink: #1a0d03;
+  --brand-ink: #1a0c02;
+  /* pressed toggles and selected rows: dark orange ground, light orange text */
+  --brand-soft: #2a1a10;
+  --brand-soft-ink: #fed7aa;
+  --link: #fdba74;
+  --nav-on: #1b2a47;
+  --seg-on: #2a3a5a;
+  --handle: #3a4c72;
+  --live: #4ade80;
   --focus: #fdba74;
-  --unusual: #f87171;
+  --unusual: #f43f5e;
   --ok: #86efac;
-  --c0: #17223a;
-  --c1: #3d2716;
-  --c2: #613214;
-  --c3: #8f3d0f;
-  --c4: #c2410c;
-  --c5: #ea580c;
-  --c6: #fb923c;
-  --c7: #fed7aa;
-  --map-area: #fb923c;
+  /* map: water and land of the design's schematic map */
+  --map-bg: #0a111f;
+  --map-land: #152139;
+  --map-outline: #4a5f8a;
+  --map-area: #fdba74;
+  --map-halo: #0a111f;
+  --map-border: #f2f5fa;
+  /* calendar ramp, None then 7 classes */
+  --c0: #1b2843;
+  --c1: #4a2617;
+  --c2: #773113;
+  --c3: #a9420f;
+  --c4: #dd5e0e;
+  --c5: #f58634;
+  --c6: #fab16f;
+  --c7: #fdddb3;
+  /* converted bars and lanes: dark fill, orange edge */
+  --conv: #2a1a10;
+  --conv-edge: #fb923c;
+  /* recurrence: 0 to 10 years with fire */
+  --r0: #1b2843;
+  --r1: #3f2419;
+  --r2: #4a2617;
+  --r3: #602c15;
+  --r4: #773113;
+  --r5: #903a11;
+  --r6: #a9420f;
+  --r7: #dd5e0e;
+  --r8: #f58634;
+  --r9: #fab16f;
+  --r10: #fdddb3;
   /* diverging scale for this year vs normal: blue below, orange above; extremes are the lightest on dark */
   --div0: #9cc5ff;
   --div1: #5e93db;
@@ -39,21 +75,49 @@
   --div4: #8a4a22;
   --div5: #d9672a;
   --div6: #fdb27a;
+  /* status pills: below, within, above the normal range (border, text) */
+  --below: #7fb0f0;
+  --below-ink: #9cc5ff;
+  --within: #22c55e;
+  --within-ink: #86efac;
+  --above: #f97316;
+  --above-ink: #fdba74;
+  /* compared lines: differ in lightness and dash, not only hue */
+  --cmp0: #f97316;
+  --cmp1: #f2f5fa;
+  --cmp2: #9ec2f7;
+  --cmp3: #5b86d6;
 }
 :root[data-theme='light'] {
   color-scheme: light;
   --bg: #f6f7f9;
   --surface: #ffffff;
   --surface-2: #eef1f5;
+  --panel: #f1f4f8;
   --line: #d8dee7;
+  --line-2: #c5cedb;
+  --row-line: #e6eaf0;
   --ink: #0f172a;
   --ink-2: #3f4c61;
   --ink-3: #5c6a80;
   --brand: #c2410c;
   --brand-ink: #ffffff;
+  --brand-soft: #fff1e6;
+  --brand-soft-ink: #9a3412;
+  --link: #c2410c;
+  --nav-on: #e3e8f0;
+  --seg-on: #ffffff;
+  --handle: #c5cedb;
+  --live: #16a34a;
   --focus: #c2410c;
-  --unusual: #b91c1c;
+  --unusual: #be123c;
   --ok: #15803d;
+  --map-bg: #dfe6ee;
+  --map-land: #f8fafc;
+  --map-outline: #8796ad;
+  --map-area: #c2410c;
+  --map-halo: #ffffff;
+  --map-border: #334155;
   --c0: #eef1f5;
   --c1: #ffedd5;
   --c2: #fed7aa;
@@ -62,7 +126,19 @@
   --c5: #ea580c;
   --c6: #c2410c;
   --c7: #7c2d12;
-  --map-area: #c2410c;
+  --conv: #fff1e6;
+  --conv-edge: #c2410c;
+  --r0: #eef1f5;
+  --r1: #fff4e8;
+  --r2: #ffedd5;
+  --r3: #fee2c4;
+  --r4: #fed7aa;
+  --r5: #fdba74;
+  --r6: #fb923c;
+  --r7: #ea580c;
+  --r8: #c2410c;
+  --r9: #9a3412;
+  --r10: #7c2d12;
   --div0: #1e4b8f;
   --div1: #3f73c0;
   --div2: #9dbbe3;
@@ -70,6 +146,16 @@
   --div4: #f6c49b;
   --div5: #e2702a;
   --div6: #9a3412;
+  --below: #3f73c0;
+  --below-ink: #1e4b8f;
+  --within: #15803d;
+  --within-ink: #166534;
+  --above: #c2410c;
+  --above-ink: #9a3412;
+  --cmp0: #c2410c;
+  --cmp1: #0f172a;
+  --cmp2: #3f73c0;
+  --cmp3: #64748b;
 }
 
 /* shadcn/ui semantic variables, mapped onto the tokens above. */
@@ -90,13 +176,13 @@
   --accent-foreground: var(--ink);
   --destructive: var(--unusual);
   --border: var(--line);
-  --input: var(--line);
+  --input: var(--line-2);
   --ring: var(--focus);
   --radius: 0.5rem;
 }
 
 @theme inline {
-  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Archivo', 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-heading: var(--font-sans);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -118,13 +204,27 @@
   --color-ring: var(--ring);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-panel: var(--panel);
   --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-row-line: var(--row-line);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
   --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-soft-ink: var(--brand-soft-ink);
+  --color-link: var(--link);
+  --color-nav-on: var(--nav-on);
+  --color-seg-on: var(--seg-on);
+  --color-handle: var(--handle);
+  --color-live: var(--live);
   --color-unusual: var(--unusual);
   --color-ok: var(--ok);
+  --color-map-bg: var(--map-bg);
+  --color-conv: var(--conv);
+  --color-conv-edge: var(--conv-edge);
   --color-c0: var(--c0);
   --color-c1: var(--c1);
   --color-c2: var(--c2);
@@ -144,32 +244,131 @@
   html { background: var(--bg); }
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1.5;
+    font-variant-numeric: tabular-nums;
   }
   ::selection { background: var(--brand); color: var(--brand-ink); }
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-  * { scrollbar-color: var(--line) transparent; }
+  * { scrollbar-color: var(--line-2) transparent; }
   a { text-underline-offset: 3px; }
+  /* "Show the numbers" and similar disclosures: a 44 px touch target */
+  summary { min-height: 44px; padding-block: 11px; box-sizing: border-box; }
 }
 
 /* The few things utilities cannot express cleanly. */
 @layer components {
-  .cell-partial { background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgb(127 127 127 / 0.45) 4px 6px); }
+  /* native controls of the design: 40 px on desktop, 48 px on touch layouts (.touch) */
+  .ctl {
+    box-sizing: border-box;
+    height: 40px;
+    width: 100%;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line-2);
+    background: var(--surface-2);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+  }
+  .touch .ctl { height: 48px; border-radius: 12px; font-size: 16px; }
+  .btn {
+    box-sizing: border-box;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--line-2);
+    background: var(--surface-2);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0 12px;
+  }
+  .touch .btn { min-height: 48px; border-radius: 12px; font-size: 14px; font-weight: 600; padding: 0 16px; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn svg { flex: none; }
+  .btn[aria-pressed='true'], .btn.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-soft-ink); }
+  .btn.main { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); font-weight: 700; }
+  .ico {
+    width: 40px;
+    height: 40px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid var(--line-2);
+    background: var(--surface);
+    color: var(--ink-2);
+    cursor: pointer;
+    padding: 0;
+  }
+  .touch .ico { width: 48px; height: 48px; border-radius: 12px; color: var(--ink); }
+  .float { box-shadow: 0 4px 12px rgb(5 10 20 / 0.5); }
+  .opt { display: flex; align-items: center; gap: 10px; font-size: 13px; min-height: 32px; cursor: pointer; }
+  .opt input { width: 18px; height: 18px; accent-color: var(--brand); margin: 0; flex: none; }
+  .touch .opt { min-height: 44px; font-size: 15px; gap: 12px; }
+  .touch .opt input { width: 20px; height: 20px; }
+  .lbl { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 0; }
+  .touch .lbl { font-size: 14px; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 12px;
+    border-radius: 14px;
+    border: 1px solid currentColor;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  /* striped fill of partial periods (month, year or season still running) */
+  .cell-partial { background: repeating-linear-gradient(135deg, var(--c3) 0 3px, var(--c1) 3px 6px) !important; }
+  .bar-partial { background: repeating-linear-gradient(135deg, var(--c4) 0 3px, var(--c1) 3px 6px) !important; }
+  .lane-conv { background: repeating-linear-gradient(135deg, var(--c1) 0 3px, var(--conv) 3px 6px); }
   .cell-unusual::after {
     content: '';
     position: absolute;
-    right: 3px;
-    top: 3px;
-    width: 6px;
-    height: 6px;
+    right: 2px;
+    top: 2px;
+    width: 5px;
+    height: 5px;
     border-radius: 9999px;
     background: var(--unusual);
-    box-shadow: 0 0 0 1.5px var(--surface);
+    box-shadow: 0 0 0 1px var(--surface);
   }
+  /* cards of the Method page */
+  .me-card {
+    box-sizing: border-box;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 24px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+  @media (max-width: 599px) { .me-card { padding: 16px; } }
   .map .maplibregl-ctrl-attrib { font-size: 11px; }
+  .map-chip {
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgb(10 17 31 / 0.86);
+    color: #e7ecf5;
+    font-size: 11px;
+    line-height: 1.3;
+    white-space: nowrap;
+    pointer-events: none;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .cell { transition: background-color 240ms cubic-bezier(0.16, 1, 0.3, 1); }
+  .sheet { transition: height 280ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 }

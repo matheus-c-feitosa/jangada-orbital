@@ -1,8 +1,7 @@
 import { useMemo } from 'react'
 import { SNPP_END, type AreaSeries } from '../data/load'
 import { G_VIIRS, medianRatio, viirsRatios } from './viirs'
-
-const two = new Intl.NumberFormat('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+import { useI18n } from '../i18n'
 
 /** Decimal year of "YYYY-MM-DD" (or "YYYY-MM"). */
 const dec = (d: string) => {
@@ -31,23 +30,24 @@ export function SensorTimeline({ dataDate }: { dataDate: string }) {
   const start = 2000
   const end = Math.max(dec(dataDate), 2026)
   const pos = (d: string | null) => (((d ? dec(d) : end) - start) / (end - start)) * 100
+  const i = useI18n()
   return (
-    <section aria-labelledby="lanes-title" className="mt-8">
-      <h2 id="lanes-title">Which satellite counts each year</h2>
-      <p>Aqua is the reference from August 2002 to December 2023. Before that Terra is converted to Aqua; from 2024 the mean of NOAA-20 and NOAA-21 is.</p>
+    <section aria-labelledby="lanes-title" className="me-card">
+      <h2 id="lanes-title">{i.t('lanesTitle')}</h2>
+      <p>{i.t('lanesText')}</p>
       <div className="flex flex-col gap-2">
         {LANES.map((l) => (
           <div key={l.name} className="grid grid-cols-[72px_1fr] items-center gap-3">
             <span className="text-sm">{l.name}</span>
-            <div className="relative h-6 rounded bg-surface-2">
-              <span className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-line" style={{ left: `${pos(l.flying[0])}%`, width: `${pos(l.flying[1]) - pos(l.flying[0])}%` }} aria-hidden="true" />
+            <div className="relative h-[22px] rounded bg-panel">
+              <span className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-handle" style={{ left: `${pos(l.flying[0])}%`, width: `${pos(l.flying[1]) - pos(l.flying[0])}%` }} aria-hidden="true" />
               {l.role && (
-                <span className={`absolute inset-y-1 rounded ${l.role.kind === 'observed' ? 'bg-c5' : 'cell-partial box-border border-[1.5px] border-c6 bg-c1'}`}
+                <span className={`absolute inset-y-1 rounded ${l.role.kind === 'observed' ? 'bg-c5' : 'lane-conv box-border border-[1.5px] border-conv-edge'}`}
                   style={{ left: `${pos(l.role.from)}%`, width: `${pos(l.role.to) - pos(l.role.from)}%` }} aria-hidden="true" />
               )}
               <span className="sr-only">
-                Flying {l.flying[0].slice(0, 7)} to {l.flying[1] ? l.flying[1] : 'today'}.
-                {l.role ? ` In the series ${l.role.kind === 'observed' ? 'as observed' : 'converted to Aqua'} from ${l.role.from.slice(0, 7)}${l.role.to ? ` to ${l.role.to.slice(0, 7)}` : ''}.` : ' Not in the series; used to calibrate.'}
+                {i.t('laneFlying', { a: l.flying[0].slice(0, 7), b: l.flying[1] ? l.flying[1] : i.t('today') })}
+                {l.role ? i.t('laneIn', { how: i.t(l.role.kind === 'observed' ? 'asObserved' : 'convertedToAqua'), a: l.role.from.slice(0, 7), to: l.role.to ? i.t('laneTo', { b: l.role.to.slice(0, 7) }) : '' }) : i.t('notInSeries')}
               </span>
             </div>
           </div>
@@ -57,10 +57,10 @@ export function SensorTimeline({ dataDate }: { dataDate: string }) {
           <div className="flex justify-between"><span>2000</span><span>2006</span><span>2012</span><span>2018</span><span>{Math.floor(end)}</span></div>
         </div>
       </div>
-      <ul className="!mt-3 flex !list-none flex-wrap gap-x-5 gap-y-2 !p-0 text-xs" aria-label="Legend">
-        <li className="inline-flex items-center gap-2"><span className="inline-block h-2.5 w-4 rounded-sm bg-c5" />Observed, the reference</li>
-        <li className="inline-flex items-center gap-2"><span className="cell-partial inline-block box-border h-2.5 w-4 rounded-sm border-[1.5px] border-c6 bg-c1" />Converted to Aqua</li>
-        <li className="inline-flex items-center gap-2"><span className="inline-block h-1 w-4 rounded-full bg-line" />In orbit</li>
+      <ul className="!mt-3 flex !list-none flex-wrap gap-x-5 gap-y-2 !p-0 text-xs" aria-label={i.t('legend')}>
+        <li className="inline-flex items-center gap-2"><span className="inline-block h-2.5 w-4 rounded-sm bg-c5" />{i.t('legReference')}</li>
+        <li className="inline-flex items-center gap-2"><span className="lane-conv inline-block box-border h-2.5 w-4 rounded-sm border-[1.5px] border-conv-edge" />{i.t('legToAqua')}</li>
+        <li className="inline-flex items-center gap-2"><span className="inline-block h-1 w-4 rounded-full bg-handle" />{i.t('legInOrbit')}</li>
       </ul>
     </section>
   )
@@ -72,6 +72,8 @@ const PAD = { left: 48, right: 14, top: 12, bottom: 28 }
 
 /** Spec 002, story 5 (FR-027): NOAA-20 and NOAA-21 against S-NPP, month by month, next to g. */
 export function ViirsAgreement({ brazil }: { brazil: AreaSeries | null }) {
+  const i = useI18n()
+  const two = new Intl.NumberFormat(i.locale, { minimumFractionDigits: 3, maximumFractionDigits: 3 })
   const points = useMemo(() => (brazil ? viirsRatios(brazil) : []), [brazil])
   if (!points.length) return null
   const lo = 0.8
@@ -95,18 +97,16 @@ export function ViirsAgreement({ brazil }: { brazil: AreaSeries | null }) {
   const m21 = medianRatio(points, 'noaa21')
   // ratios outside the axis are drawn at its edge; name them so the chart does not hide them
   const clipped = points.filter((p) => [p.noaa20, p.noaa21].some((v) => v !== null && (v < lo || v > hi))).map((p) => p.month)
-  const years = Array.from({ length: Math.floor(last) - Math.ceil(first) + 1 }, (_, i) => Math.ceil(first) + i).filter((yr) => yr % 2 === 0)
+  const years = Array.from({ length: Math.floor(last) - Math.ceil(first) + 1 }, (_, k) => Math.ceil(first) + k).filter((yr) => yr % 2 === 0)
 
   return (
-    <section aria-labelledby="viirs-title" className="mt-8">
-      <h2 id="viirs-title">The VIIRS satellites agree</h2>
+    <section aria-labelledby="viirs-title" className="me-card">
+      <h2 id="viirs-title">{i.t('viirsTitle')}</h2>
       <p>
-        Month by month, NOAA-20{m20 !== null ? ` (median ratio ${two.format(m20)})` : ''}
-        {m21 !== null ? ` and NOAA-21 (${two.format(m21)})` : ''} count almost the same fires as S-NPP. The series joins
-        them with g = {G_VIIRS}, the dashed line.
+        {i.t('viirsText', { a: m20 !== null ? i.t('medianRatio', { r: two.format(m20) }) : '', b: m21 !== null ? ` (${two.format(m21)})` : '', g: G_VIIRS })}
       </p>
       <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img"
-        aria-label={`Monthly ratio of NOAA-20 and of NOAA-21 to S-NPP detections over Brazil, ${points[0].month} to ${points[points.length - 1].month}, with a reference line at ${G_VIIRS}`}>
+        aria-label={i.t('viirsAria', { a: points[0].month, b: points[points.length - 1].month, g: G_VIIRS })}>
         {[0.8, 0.9, 1, 1.1, 1.2].map((t) => (
           <g key={t}>
             <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} className="stroke-line" />
@@ -118,14 +118,14 @@ export function ViirsAgreement({ brazil }: { brazil: AreaSeries | null }) {
         <path d={line('noaa21')} fill="none" className="stroke-ink-2" strokeWidth={2} strokeDasharray="5 3" strokeLinejoin="round" />
         {years.map((yr) => <text key={yr} x={x(`${yr}-01`)} y={H - 8} textAnchor="middle" className="fill-ink-3 text-[12px] tabular-nums max-sm:text-[18px]">{yr}</text>)}
       </svg>
-      <ul className="!m-0 flex !list-none flex-wrap gap-x-5 gap-y-2 !p-0 text-xs" aria-label="Legend">
+      <ul className="!m-0 flex !list-none flex-wrap gap-x-5 gap-y-2 !p-0 text-xs" aria-label={i.t('legend')}>
         <li className="inline-flex items-center gap-2"><svg width="24" height="8" aria-hidden="true"><line x1="1" x2="23" y1="4" y2="4" className="stroke-brand" strokeWidth={2} /></svg>NOAA-20 ÷ S-NPP</li>
         <li className="inline-flex items-center gap-2"><svg width="24" height="8" aria-hidden="true"><line x1="1" x2="23" y1="4" y2="4" className="stroke-ink-2" strokeWidth={2} strokeDasharray="5 3" /></svg>NOAA-21 ÷ S-NPP</li>
         <li className="inline-flex items-center gap-2"><svg width="24" height="8" aria-hidden="true"><line x1="1" x2="23" y1="4" y2="4" className="stroke-ink" strokeWidth={1.5} strokeDasharray="6 4" /></svg>g = {G_VIIRS}</li>
       </ul>
       <p className="text-sm">
-        Months with fewer than 500 detections are left out: ratios of small counts are noise.
-        {clipped.length ? ` ${clipped.join(', ')} fall outside ${lo}–${hi} and are drawn at the edge.` : ''}
+        {i.t('viirsNote')}
+        {clipped.length ? i.t('viirsClipped', { list: clipped.join(', '), lo, hi }) : ''}
       </p>
     </section>
   )
