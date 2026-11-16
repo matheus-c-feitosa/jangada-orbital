@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { cellAreaKm2, cellCentre, cellKey, cellOfKey, cellsInRing, circleRing, pointInRing, type Ring } from '../src/geo/aoi'
+import { cellAreaKm2, cellCentre, cellKey, cellOfKey, cellsInRing, cellsInRings, circleRing, pointInRing, type Ring } from '../src/geo/aoi'
 import { classBreaks, classOf, compareMonth, daysIn } from '../src/calendar/stats'
 import { buildCsv } from '../src/data/csv'
 import type { AreaSeries, Manifest } from '../src/data/load'
@@ -140,5 +140,19 @@ describe('area (T048)', () => {
     const { ringAreaKm2, circleRing } = await import('../src/geo/aoi')
     expect(ringAreaKm2([[0, 0], [1, 0], [1, 1], [0, 1]])).toBeCloseTo(12364, -1) // sphere; ellipsoid gives ~12,309
     expect(ringAreaKm2(circleRing(-7.23, -39.31, 30))).toBeCloseTo(Math.PI * 30 * 30, -1)
+  })
+})
+
+describe('areas made of several parts (#6)', () => {
+  const box = (x: number, y: number, s: number): Ring => [[x, y], [x + s, y], [x + s, y + s], [x, y + s], [x, y]]
+  test('the cells of every part count, and a part too small for a cell centre adds no cell', () => {
+    const main = box(-50, -10, 0.3) // 3 x 3 cells
+    const island = box(-49, -10, 0.2) // 2 x 2 cells, apart from the main part
+    const islet = box(-48.52, -9.98, 0.02) // inside one cell, holds no cell centre
+    const { cells, box: b, approximate } = cellsInRings(main, [island, islet])
+    expect(cells.size).toBe(9 + 4)
+    expect(approximate).toBe(false)
+    expect(b).toEqual({ latMin: -100, latMax: -97, lonMin: -500, lonMax: -488 })
+    expect(cellsInRings(main).cells.size).toBe(9)
   })
 })

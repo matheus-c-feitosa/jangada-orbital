@@ -11,7 +11,9 @@ export type Area =
   | { kind: 'country' }
   | { kind: 'state'; uf: string }
   | { kind: 'biome'; id: string }
-  | { kind: 'ring'; ring: Ring; label: string; origin: 'draw' | 'circle' | 'muni'; circle?: { lat: number; lon: number; km: number }; muni?: string }
+  | { kind: 'ring'; ring: Ring; label: string; origin: 'draw' | 'circle' | 'muni'; circle?: { lat: number; lon: number; km: number }; muni?: string
+      /** other parts of a municipality (islands, enclaves), counted with `ring` */
+      parts?: Ring[] }
 export type View = 'harmonized' | 'observed'
 export type AreaKind = 'brazil' | 'biome' | 'state' | 'muni' | 'drawn'
 
@@ -153,11 +155,46 @@ export function AreaPanel(p: Props) {
     }
     setPending(k)
   }
+  // Municipality search (#6): our own suggestion list instead of a <datalist>, whose filtering is the browser's and
+  // does not ignore accents. "sao paulo" finds São Paulo; arrows, Enter and Escape work (ARIA combobox pattern).
+  const [muniOpen, setMuniOpen] = useState(false)
+  const [muniActive, setMuniActive] = useState(-1)
+  const muniMatches = useMemo(() => {
+    const q = fold(muniText.trim())
+    if (q.length < 2) return []
+    // the name itself first ("sao paulo" → São Paulo, SP before São Paulo das Missões), then names that start with it
+    const exact: string[] = []
+    const starts: string[] = []
+    const inside: string[] = []
+    muni.folded.forEach((f, k) => {
+      if (f.startsWith(`${q},`)) exact.push(muni.labels[k])
+      else if (f.startsWith(q)) starts.push(muni.labels[k])
+      else if (f.includes(q)) inside.push(muni.labels[k])
+    })
+    return [...exact, ...starts, ...inside].slice(0, 8)
+  }, [muniText, muni])
+  const pickMuniLabel = (label: string) => {
+    const hit = muni.byLabel.get(label)
+    if (!hit) return false
+    setMuniText(label)
+    setMuniOpen(false)
+    p.onPickMuni(hit[0], hit[1], hit[2])
+    return true
+  }
   const onMuniText = (text: string) => {
     setMuniText(text)
-    // a name picked from the list, or typed in full without accents ("sao paulo, sp")
-    const hit = muni.byLabel.get(text) ?? muni.byLabel.get(muni.byFolded.get(fold(text.trim())) ?? '')
-    if (hit) p.onPickMuni(hit[0], hit[1], hit[2])
+    setMuniOpen(true)
+    setMuniActive(-1)
+    // a full name, also typed without accents ("sao paulo, sp")
+    const label = muni.byLabel.has(text) ? text : muni.byFolded.get(fold(text.trim()))
+    if (label) pickMuniLabel(label)
+  }
+  const onMuniKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const n = muniMatches.length
+    if (e.key === 'ArrowDown' && n) { e.preventDefault(); setMuniOpen(true); setMuniActive((a) => Math.min(n - 1, a + 1)) }
+    else if (e.key === 'ArrowUp' && n) { e.preventDefault(); setMuniActive((a) => Math.max(0, a - 1)) }
+    else if (e.key === 'Enter' && muniOpen && n) { e.preventDefault(); pickMuniLabel(muniMatches[Math.max(0, muniActive)]) }
+    else if (e.key === 'Escape' && muniOpen) { e.preventDefault(); setMuniOpen(false) }
   }
   const yearsFor = p.recurrenceYears ? Array.from({ length: p.recurrenceYears[1] - p.recurrenceYears[0] + 1 }, (_, k) => p.recurrenceYears![0] + k) : []
   const layers: [MapLayer, string, string | null][] = [
@@ -205,9 +242,25 @@ export function AreaPanel(p: Props) {
         {kind === 'muni' && (
           <>
             <label className={sub} htmlFor="area-muni">{i.t('kindMuni')}</label>
-            <input id="area-muni" className="ctl" type="search" list="muni-names" placeholder={i.t('typeMuni')} autoComplete="off"
-              value={muniText} onChange={(e) => onMuniText(e.target.value)} />
-            <datalist id="muni-names">{muni.labels.map((l) => <option key={l} value={l} />)}</datalist>
+            <div className="relative">
+              <input id="area-muni" className="ctl" type="search" placeholder={i.t('typeMuni')} autoComplete="off"
+                role="combobox" aria-autocomplete="list" aria-controls="muni-options" aria-expanded={muniOpen && muniMatches.length > 0}
+                aria-activedescendant={muniOpen && muniActive >= 0 ? `muni-opt-${muniActive}` : undefined}
+                value={muniText} onChange={(e) => onMuniText(e.target.value)} onKeyDown={onMuniKey}
+                onFocus={() => setMuniOpen(true)} onBlur={() => setMuniOpen(false)} />
+              {muniOpen && muniMatches.length > 0 && (
+                <ul id="muni-options" role="listbox" aria-label={i.t('kindMuni')}
+                  className="absolute inset-x-0 top-full z-20 m-0 mt-1 max-h-64 list-none overflow-y-auto rounded-[10px] border border-line-2 bg-surface p-1 shadow-[0_10px_30px_rgb(0_0_0/0.35)]">
+                  {muniMatches.map((l, k) => (
+                    <li key={l} id={`muni-opt-${k}`} role="option" aria-selected={k === muniActive}
+                      className="cursor-pointer rounded-md px-2.5 py-2 text-sm text-ink aria-selected:bg-surface-2"
+                      onMouseDown={(e) => { e.preventDefault(); pickMuniLabel(l) }} onMouseEnter={() => setMuniActive(k)}>
+                      {l}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </>
         )}
         {kind === 'drawn' && (

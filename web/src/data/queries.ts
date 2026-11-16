@@ -1,7 +1,7 @@
 // Monthly series for a drawn area. The browser fetches whole 2° x 2° tile files (web/public/data/tiles/), not byte
 // ranges: GitHub Pages gzips .parquet responses, and gzip breaks HTTP range requests on the original file.
 import { SATELLITES, dataUrl, type AreaSeries, type Manifest, type Satellite } from './load'
-import { cellAreaKm2, cellKey, cellOfKey, cellsInRing, ringAreaKm2, tilesForBox, type Ring } from '../geo/aoi'
+import { cellAreaKm2, cellKey, cellOfKey, cellsInRings, ringAreaKm2, tilesForBox, type Ring } from '../geo/aoi'
 
 /** A drawn-area series: how many grid cells it holds, and whether a tiny area fell back to the one cell around it. */
 export type RingSeries = AreaSeries & { cells: number; approximate: boolean }
@@ -40,8 +40,10 @@ export async function seriesForRing(
   name: string,
   template: AreaSeries,
   manifest: Manifest,
+  /** other parts of the area (a municipality's islands), counted with the main ring */
+  parts: Ring[] = [],
 ): Promise<RingSeries> {
-  const { cells, box, approximate } = cellsInRing(ring)
+  const { cells, box, approximate } = cellsInRings(ring, parts)
   const months = template.months
   const index = new Map(months.map((m, i) => [m, i]))
   const zeros = () => months.map(() => 0)
@@ -59,7 +61,7 @@ export async function seriesForRing(
     cells: cells.size,
     approximate,
     // the counts come from whole cells, so the density divides by the cell's area when the area is smaller than one
-    area_km2: approximate ? cellAreaKm2(cellOfKey([...cells][0])[0]) : ringAreaKm2(ring),
+    area_km2: approximate ? cellAreaKm2(cellOfKey([...cells][0])[0]) : [ring, ...parts].reduce((s, r) => s + ringAreaKm2(r), 0),
   }
   if (!box) return out
   const available = new Set(manifest.tiles.ids)
