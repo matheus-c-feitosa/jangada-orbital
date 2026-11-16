@@ -34,6 +34,15 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.3.3
 
+      # Reachability of the data hosts from the runner, for the log: the first run hung on the IBGE API (connect
+      # time, TLS time and status per host; 20 s at most each). The refresh no longer needs IBGE.
+      - name: Check the data hosts
+        continue-on-error: true
+        run: |
+          for url in "https://firms.modaps.eosdis.nasa.gov/" "https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?formato=application/vnd.geo+json&qualidade=minima"; do
+            curl -sS -o /dev/null --max-time 20 -w "%{http_code} connect=%{time_connect}s tls=%{time_appconnect}s total=%{time_total}s ip=%{remote_ip} $url\n" "$url" || echo "unreachable: $url"
+          done
+
       - name: Download the FIRMS 7-day files and rebuild recent.json
         working-directory: pipeline
         run: |
