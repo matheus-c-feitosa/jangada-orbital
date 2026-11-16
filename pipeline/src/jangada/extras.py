@@ -30,7 +30,7 @@ from jangada import config
 from jangada.download import download_file
 from jangada.export_web import UF_NAMES, WEB_DATA, sha256
 from jangada.normalize import connect, read_csv_expr, select_for
-from jangada.regions import load_states
+from jangada.regions import STATES, load_states
 
 EXTRAS = config.RAW / "extras"
 HARMONIZED = WEB_DATA / "harmonized.parquet"
@@ -320,7 +320,7 @@ def municipalities(con) -> None:
 def validation(con) -> None:
     from jangada import harmonize
     spatial(con)
-    states = load_states()
+    states = states_for_clip()
     con.execute("CREATE OR REPLACE TEMP TABLE st AS SELECT unnest(?) AS code, ST_GeomFromGeoJSON(unnest(?)) AS geom",
                 [list(states), list(states.values())])
     assign_cells(con, "st", "cell_uf")
@@ -413,6 +413,16 @@ def usual_p90_sql(source: str, month_of_year: int) -> str:
         GROUP BY ALL"""
 
 
+def states_for_clip() -> dict[str, str]:
+    """{uf: GeoJSON geometry} of the states: the full IBGE outlines when they are cached in data/, else the published
+    ones (web/public/data/states.geojson, simplified to ~1 km). The IBGE API times out from GitHub's runners, so the
+    daily refresh (.github/workflows/refresh-recent.yml) clips with the published outlines."""
+    if STATES.exists():
+        return load_states()
+    doc = json.loads((WEB_DATA / "states.geojson").read_text(encoding="utf-8"))
+    return {f["properties"]["uf"]: json.dumps(f["geometry"]) for f in doc["features"]}
+
+
 def recent(con) -> None:
     spatial(con)
     EXTRAS.mkdir(parents=True, exist_ok=True)  # a fresh checkout (the daily refresh) has no data/ folder
@@ -432,7 +442,7 @@ def recent(con) -> None:
         parts.append(f"({select_for(con, source, 'NRT')})")
     con.execute(f"CREATE OR REPLACE TEMP TABLE r AS {' UNION ALL BY NAME '.join(parts)}")
     # clip to Brazil and drop low confidence and known static sources (gas flares, industry) seen in the archive
-    states = load_states()
+    states = states_for_clip()
     con.execute("CREATE OR REPLACE TEMP TABLE st AS SELECT unnest(?) AS code, ST_GeomFromGeoJSON(unnest(?)) AS geom",
                 [list(states), list(states.values())])
     con.execute("CREATE OR REPLACE TEMP TABLE static (a INT, b INT)")
@@ -509,7 +519,7 @@ def _points(con) -> None:
 def intensity(con) -> None:
     spatial(con)
     _points(con)
-    states = load_states()
+    states = states_for_clip()
     con.execute("CREATE OR REPLACE TEMP TABLE st AS SELECT unnest(?) AS code, ST_GeomFromGeoJSON(unnest(?)) AS geom",
                 [list(states), list(states.values())])
     assign_cells(con, "st", "cell_uf")
