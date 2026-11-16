@@ -35,6 +35,8 @@ interface Props {
   stateCode: string | null
   /** outline of a drawn or typed area */
   ring: Ring | null
+  /** other parts of the area (a municipality's islands), outlined with `ring` */
+  parts?: Ring[]
   bounds: [number, number, number, number] | null
   drawMode: DrawMode
   onDrawn: (ring: Ring) => void
@@ -458,11 +460,11 @@ export function MapView(p: Props) {
     map.setFilter('biome-halo', bfilter)
     map.setFilter('biome-line', bfilter)
     const data: GeoJSON.FeatureCollection = ring
-      ? { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } }] }
+      ? { type: 'FeatureCollection', features: [ring, ...(p.parts ?? [])].map((r) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [r] } })) }
       : EMPTY
     ;(map.getSource('area') as GeoJSONSource | undefined)?.setData(data)
     map.fitBounds(bounds ?? BRAZIL, { padding: padding(), maxZoom: 7.5, duration: 600 })
-  }, [ready, stateCode, ring, bounds, p.biomeId])
+  }, [ready, stateCode, ring, p.parts, bounds, p.biomeId])
 
   useEffect(() => {
     const map = mapRef.current

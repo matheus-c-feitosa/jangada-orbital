@@ -5,9 +5,10 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { loadAppData, type AppData, type AreaSeries, type Satellite } from './data/load'
 import { seriesForRing, type RingSeries } from './data/queries'
 import { anyCellInBrazil, outlinesOf } from './geo/coverage'
-import { loadBiomes, loadIntensity, loadMuniNames, loadMuniRanking, loadOni, loadRecent, loadRecurrence, muniOutline, muniRing } from './data/extras'
+import { loadBiomes, loadIntensity, loadMuniNames, loadMuniRanking, loadOni, loadRecent, loadRecurrence, muniOutline } from './data/extras'
 import { buildCsv, csvFileName, downloadText } from './data/csv'
-import { cellsInRing, ringBounds, type Ring } from './geo/aoi'
+import { cellsInRings, ringBounds, type Ring } from './geo/aoi'
+import { compareMonth } from './calendar/stats'
 import type { DrawMode, MapLayer, StateStanding, Theme } from './map/MapView'
 import { AreaPanel, type Area, type View } from './AreaPanel'
 import { DataPanel, TabList, tabLabels, type Tab } from './DataPanel'
@@ -214,7 +215,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
     let cancelled = false
     setAreaLoading(true)
     setAreaError(null)
-    seriesForRing(area.ring, area.label, data.areas.BR, data.manifest)
+    seriesForRing(area.ring, area.label, data.areas.BR, data.manifest, area.parts)
       .then((s) => { if (!cancelled) setRingSeries(s) })
       .catch((e: Error) => { if (!cancelled) setAreaError(e.message) })
       .finally(() => { if (!cancelled) setAreaLoading(false) })
@@ -262,13 +263,13 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   const outlines = useMemo(() => (data ? outlinesOf(data.states) : []), [data])
   const empty = useMemo(() => {
     if (area.kind !== 'ring' || !ringSeries || ringSeries.value.some((v) => v > 0)) return false
-    return !anyCellInBrazil(cellsInRing(area.ring).cells, outlines)
+    return !anyCellInBrazil(cellsInRings(area.ring, area.parts).cells, outlines)
   }, [area, ringSeries, outlines])
 
   const areaBounds = useMemo((): [number, number, number, number] | null => {
     if (!data) return null
     if (area.kind === 'state') return data.stateList.find((s) => s.uf === area.uf)?.bbox ?? null
-    if (area.kind === 'ring') return ringBounds(area.ring)
+    if (area.kind === 'ring') return ringBounds(area.parts ? [...area.ring, ...area.parts.flat()] : area.ring)
     if (area.kind === 'biome') return biomes?.list.find((b) => b.id === area.id)?.bbox ?? null
     return null
   }, [data, area, biomes])
@@ -298,8 +299,8 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
     setSheet('peek')
   }, [])
   const pickMuni = useCallback((id: string, uf: string, name: string) => {
-    muniRing(id, uf).then((ring) => {
-      if (ring) setArea({ kind: 'ring', ring, label: `${name}, ${uf}`, origin: 'muni', muni: id })
+    muniOutline(id, uf).then((m) => {
+      if (m) setArea({ kind: 'ring', ring: m.ring, parts: m.parts, label: `${name}, ${uf}`, origin: 'muni', muni: id })
       else setAreaError(`muni:${name}`)
     })
     setFiltersOpen(false)
@@ -388,7 +389,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
     <LoadBoundary fallback={partFailed}>
       <Suspense fallback={<div className="h-full bg-map-bg" />}>
         <MapView key={places ? `places-${theme}` : 'plain'} theme={theme} places={places} states={data.states} stateCode={area.kind === 'state' ? area.uf : null}
-          ring={area.kind === 'ring' ? area.ring : null} bounds={areaBounds} drawMode={drawMode} onDrawn={onDrawn} confirmBox={confirmBox}
+          ring={area.kind === 'ring' ? area.ring : null} parts={area.kind === 'ring' ? area.parts : undefined} bounds={areaBounds} drawMode={drawMode} onDrawn={onDrawn} confirmBox={confirmBox}
           layer={layer} standings={standings} biomeStandings={biomeStandings} normalUnit={area.kind === 'biome' && biomes ? 'biome' : 'state'}
           dateLabel={dateLabel} onPickState={pickState} onPickBiome={pickBiome} compact={phone} className="h-full"
           biomes={biomes?.outlines ?? null} biomeId={area.kind === 'biome' ? area.id : null} biomeBorders={biomeBorders} stateBorders={stateBorders}
@@ -427,7 +428,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
     else if (a.kind === 'muni') {
       // the URL keeps "m:…" until the outline is in, so a reload meanwhile still opens the municipality
       muniOutline(a.id, a.uf).then((m) => {
-        if (m) setArea({ kind: 'ring', ring: m.ring, label: `${m.name}, ${a.uf}`, origin: 'muni', muni: a.id })
+        if (m) setArea({ kind: 'ring', ring: m.ring, parts: m.parts, label: `${m.name}, ${a.uf}`, origin: 'muni', muni: a.id })
         else setAreaError('shared-muni')
         setUrlRead(true)
       })
@@ -452,7 +453,21 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
     if (next !== window.location.href) window.history.replaceState(window.history.state, '', next)
   }, [urlRead, shared, lastYear])
   const shareUrl = viewUrl(`${window.location.origin}${window.location.pathname}`, shared, lastYear)
-  const share = <SharePanel url={shareUrl} text={shareText(areaName, summary, shareUrl)} touch={!desktop} />
+  // #5: the message says the area, this month, its ratio to the usual pace and whether that is unusual, then the link
+  const monthLine = useMemo(() => {
+    if (!series || areaLoading) return null
+    const t = series.months.indexOf(partialMonth)
+    if (t < 0) return null
+    const cmp = compareMonth(series.months, series.value, t, partialDays)
+    const [y, m] = partialMonth.split('-').map(Number)
+    const month = `${i.monthShort(m - 1)} ${y}`
+    const verdict = i.t(cmp.unusual ? 'shareUnusual' : 'shareUsual')
+    return cmp.ratio !== null
+      ? i.t('shareMonth', { month, n: i.det(cmp.value), r: i.one(cmp.ratio), verdict })
+      : i.t('shareMonthNoRatio', { month, n: i.det(cmp.value) })
+  }, [series, areaLoading, partialMonth, partialDays, i])
+  const answer = [monthLine, summary].filter(Boolean).join(' ') || null
+  const share = <SharePanel url={shareUrl} text={shareText(areaName, answer, shareUrl)} touch={!desktop} />
   const drawHint = drawing && (
     <p role="status" className="float absolute inset-x-3 top-3 z-10 m-0 rounded-xl border border-brand bg-surface px-4 py-3 text-sm">
       {drawMode === 'rectangle' ? i.t('tapRect') : i.t('tapPoly')}{' '}
