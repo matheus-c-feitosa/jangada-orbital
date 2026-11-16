@@ -1,8 +1,9 @@
 # Demo video script
 
 30-second project demo for the NASA Space Apps Challenge 2026 submission ("Link to Project Demo" field).
-Length: **28.0 s** (2 s of margin under the 30 s limit). Narration in Portuguese by a team member, burned-in English
-subtitles. The final cut (2026-11-15) follows the script below; see "How the final cut was made".
+Length: **28.0 s** (2 s of margin under the 30 s limit). Narration in English by a team member, with the same words
+burned in as English subtitles. The Portuguese column below was the first plan. The final cut (2026-11-15) follows
+the script below; see "How the final cut was made".
 
 Sources read on 2026-11-14:
 [Project Submission Guide](https://www.spaceappschallenge.org/resources/project-submission-guide/) (section "Tips for
@@ -90,11 +91,17 @@ time, drawn with Skia (`@napi-rs/canvas`) and encoded with ffmpeg (libx264, 1080
   the real app on 2026-11-15, data through 14 Nov 2026; nothing on them was edited.
 - Title, challenge and end cards: drawn by the same script with the team's mark, the app's colours, Michroma and
   Archivo (SIL Open Font License) and IBM Plex Mono (SIL OFL). No NASA logo or insignia.
+- Interaction: a cursor, click ripples and orange highlight rings are drawn over the screenshots to show where the user
+  clicks (area picker, Season tab, "2026 so far") and what to read (the calendar, "Below normal", the season sentence,
+  the validation table). The drawn area's outline is traced along the polygon the app drew. Under each click, the
+  screenshot changes from the view before the click to the view after it, both captured from the app.
 - Subtitles: burned in by the render, white Archivo at 54 px (5% of the frame height) on a dark box, at most two lines.
 - SI: the render script was written with Claude Code, so a small label in the lower-right corner reads
   "Edited with SI-assisted code · app footage is the live app" for the whole video. The narration is a human voice.
 - Audio: the narration is cleaned (high-pass at 80 Hz, light denoise), normalized to −16 LUFS and padded to 28.0 s.
-  No music.
+  Music: a 28-second excerpt (act IV, C–G–Am–F) of the soundtrack of our internal explainer video. That soundtrack is
+  synthesized by our own script (no samples, no third-party music), written with Claude Code, so it is listed as
+  SI-assisted audio. It is ducked under the voice with a sidechain compressor.
 
 ## Tagline options
 

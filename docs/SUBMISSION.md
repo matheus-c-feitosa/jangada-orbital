@@ -125,7 +125,8 @@ Every SI-generated change was reviewed and tested by the team. Commits with SI-g
 
 The demo video is rendered by a script written with Claude Code: its title and end cards are drawn by code, and the
 app footage is screenshots of the live app. It carries a visible label, "Edited with SI-assisted code", for its whole
-length. The narration is a human voice, not SI-generated. No SI-generated content uses NASA logos, flags or mission
+length. The narration is a human voice, not SI-generated. The music bed is synthesized by a script written with
+Claude Code (SI-assisted audio, no samples). No SI-generated content uses NASA logos, flags or mission
 insignia.
 
 ## Final project link
@@ -139,4 +140,5 @@ DEMO_URL (T028, #18): a 28-second video, 1080p, unlisted, no login. The script, 
 `docs/demo/script.md`.
 
 Video: the live app (Brazil, Pará, a drawn area, the Season and "2026 so far" views, the Method page) between a title
-card and an end card. Narration in Portuguese by a team member, with burned-in English subtitles.
+card and an end card, with a cursor and highlights showing each click. Narration in English by a team member, with
+burned-in English subtitles. Music: an excerpt of our own synthesized soundtrack.
