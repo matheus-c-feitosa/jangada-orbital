@@ -5,7 +5,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { loadAppData, type AppData, type AreaSeries, type Satellite } from './data/load'
 import { seriesForRing, type RingSeries } from './data/queries'
 import { anyCellInBrazil, outlinesOf } from './geo/coverage'
-import { loadBiomes, loadIntensity, loadMuniNames, loadMuniRanking, loadOni, loadRecent, loadRecurrence, muniRing } from './data/extras'
+import { loadBiomes, loadIntensity, loadMuniNames, loadMuniRanking, loadOni, loadRecent, loadRecurrence, muniOutline, muniRing } from './data/extras'
 import { buildCsv, csvFileName, downloadText } from './data/csv'
 import { cellsInRing, ringBounds, type Ring } from './geo/aoi'
 import type { DrawMode, MapLayer, StateStanding, Theme } from './map/MapView'
@@ -18,6 +18,8 @@ import { ytdStanding } from './rank/ranking'
 import { LangContext, initialLang, makeI18n, saveLang, type Lang } from './i18n'
 import { LoadBoundary } from './LoadBoundary'
 import { PrintReport } from './PrintReport'
+import { SharePanel } from './app/SharePanel'
+import { parseView, shareText, sharedCircleRing, viewUrl, type SharedView } from './app/urlState'
 
 // The map (MapLibre, the largest part of the code) is its own chunk, requested once the data is in: the answer and
 // the calendar show without waiting for the map's code. Measured with 4G and CPU 4x, fetching it next to the data
@@ -297,7 +299,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   }, [])
   const pickMuni = useCallback((id: string, uf: string, name: string) => {
     muniRing(id, uf).then((ring) => {
-      if (ring) setArea({ kind: 'ring', ring, label: `${name}, ${uf}`, origin: 'muni' })
+      if (ring) setArea({ kind: 'ring', ring, label: `${name}, ${uf}`, origin: 'muni', muni: id })
       else setAreaError(`muni:${name}`)
     })
     setFiltersOpen(false)
@@ -310,7 +312,9 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   const onDrawn = useCallback((ring: Ring) => {
     setDrawMode('none')
     setSheet('peek')
-    setArea({ kind: 'ring', ring, label: 'Drawn area', origin: 'draw' })
+    // 3 decimals (~110 m, well inside a 0.1° cell), as the shared link carries it: a link reopens the same numbers
+    const r3 = (v: number) => Math.round(v * 1000) / 1000
+    setArea({ kind: 'ring', ring: ring.map(([lon, lat]) => [r3(lon), r3(lat)] as [number, number]), label: 'Drawn area', origin: 'draw' })
   }, [])
   // On tablets the drawer covers the map; close it while the user draws.
   const startDraw = useCallback((mode: DrawMode) => {
@@ -351,7 +355,8 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   const notices = (
     <>
       {areaError && <p className="m-0 text-[13px] text-unusual" role="alert">
-        {areaError.startsWith('muni:') ? i.t('muniLoadError', { name: areaError.slice(5) }) : i.t('areaLoadError', { msg: areaError })}</p>}
+        {areaError === 'shared-muni' ? i.t('sharedMuniError')
+          : areaError.startsWith('muni:') ? i.t('muniLoadError', { name: areaError.slice(5) }) : i.t('areaLoadError', { msg: areaError })}</p>}
       {empty && <p className="m-0 text-[13px] text-ink-3" role="status">{i.t('emptyArea')}</p>}
       {area.kind === 'ring' && ringSeries?.approximate && !empty && <p className="m-0 text-[13px] text-ink-3" role="status">{i.t('approxArea')}</p>}
     </>
@@ -404,6 +409,50 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
   }
 
   const summary = status ? summaryText(status, dateLabel, i) : null
+
+  // The view in the URL (#5): a shared link reopens the same area, values and years. Read once the data is in (the
+  // state codes and years come from it), then the URL follows every change without adding history entries.
+  const [urlRead, setUrlRead] = useState(false)
+  useEffect(() => {
+    if (!data || urlRead) return
+    const v = parseView(window.location.search, lastYear)
+    if (v.sat) { setView('observed'); setSat(v.sat) }
+    if (v.years) { setFromYear(v.years[0]); setToYear(v.years[1]) }
+    const a = v.area
+    if (a.kind === 'state') setArea({ kind: 'state', uf: a.uf })
+    else if (a.kind === 'biome') setArea({ kind: 'biome', id: a.id })
+    else if (a.kind === 'circle') {
+      setArea({ kind: 'ring', ring: sharedCircleRing(a), label: `${a.km} km, ${a.lat.toFixed(2)}°, ${a.lon.toFixed(2)}°`, origin: 'circle', circle: { lat: a.lat, lon: a.lon, km: a.km } })
+    } else if (a.kind === 'polygon') setArea({ kind: 'ring', ring: a.ring, label: 'Drawn area', origin: 'draw' })
+    else if (a.kind === 'muni') {
+      // the URL keeps "m:…" until the outline is in, so a reload meanwhile still opens the municipality
+      muniOutline(a.id, a.uf).then((m) => {
+        if (m) setArea({ kind: 'ring', ring: m.ring, label: `${m.name}, ${a.uf}`, origin: 'muni', muni: a.id })
+        else setAreaError('shared-muni')
+        setUrlRead(true)
+      })
+      return
+    }
+    setUrlRead(true)
+  }, [data, urlRead, lastYear])
+  const shared: SharedView = useMemo(() => ({
+    area: area.kind === 'country' ? { kind: 'country' }
+      : area.kind === 'state' ? { kind: 'state', uf: area.uf }
+      : area.kind === 'biome' ? { kind: 'biome', id: area.id }
+      : area.origin === 'muni' && area.muni ? { kind: 'muni', id: area.muni, uf: area.label.slice(-2) }
+      : area.origin === 'circle' && area.circle ? { kind: 'circle', ...area.circle }
+      : { kind: 'polygon', ring: area.ring },
+    sat: view === 'observed' ? sat : null,
+    years: [fromYear, endYear],
+    lang,
+  }), [area, view, sat, fromYear, endYear, lang])
+  useEffect(() => {
+    if (!urlRead) return
+    const next = viewUrl(window.location.href, shared, lastYear)
+    if (next !== window.location.href) window.history.replaceState(window.history.state, '', next)
+  }, [urlRead, shared, lastYear])
+  const shareUrl = viewUrl(`${window.location.origin}${window.location.pathname}`, shared, lastYear)
+  const share = <SharePanel url={shareUrl} text={shareText(areaName, summary, shareUrl)} touch={!desktop} />
   const drawHint = drawing && (
     <p role="status" className="float absolute inset-x-3 top-3 z-10 m-0 rounded-xl border border-brand bg-surface px-4 py-3 text-sm">
       {drawMode === 'rectangle' ? i.t('tapRect') : i.t('tapPoly')}{' '}
@@ -437,7 +486,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
       <main className="grid h-[calc(100dvh-56px)] overflow-hidden"
         style={{ gridTemplateColumns: dataCollapsed ? cols.split(' ').slice(0, 2).join(' ') : cols }}>
         <aside className="relative overflow-y-auto border-r border-line bg-surface p-5" aria-label={i.t('filters')}>
-          <AreaPanel {...filterProps} about={about} />
+          <AreaPanel {...filterProps} about={about} share={share} />
         </aside>
         <section className="relative min-w-0" aria-label={i.t('mapRegion')}>
           {map}
@@ -506,6 +555,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
             <button type="button" className="btn touch !min-h-12 !rounded-xl !text-sm" onClick={() => window.print()} disabled={!filterProps.canDownload}>
               <Printer size={18} aria-hidden="true" /> {i.t('printReport')}
             </button>
+            <div className="mt-2">{share}</div>
           </div>
           <div className="min-w-0">
             <DataPanel {...panelProps} tabStyle="segment" />
@@ -535,7 +585,7 @@ function Shell({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
         view={sheet} onView={setSheet} peekHeight={peekHeight} map={map} notices={notices}
         tabs={<TabList tab={tab} onTab={setTab} labels={tabLabels(lastYear, i, true)} tabStyle="segment" />}
         panel={<DataPanel {...panelProps} tabStyle="segment" hideTabs />}
-        canDownload={filterProps.canDownload} onDownload={download}
+        canDownload={filterProps.canDownload} onDownload={download} share={share}
         drawMode={drawMode} onDrawMode={startDraw} onConfirmBox={() => setConfirmBox((n) => n + 1)}
         biomes={biomes?.list ?? []} standings={standings} biomeStandings={biomeStandings}
         munis={muniNames ?? null} layer={layer} onLayer={setLayer} recurrenceYears={filterProps.recurrenceYears} period={period} onPeriod={setPeriod}

@@ -104,6 +104,12 @@ test('drawing a rectangle on the map loads that area', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: /^Drawn area/ })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText(/grid cells/)).toBeVisible({ timeout: 30_000 })
   await expect(page.getByRole('table', { name: /Fire detections per month/ })).toBeVisible()
+  // the drawn outline is in the link: a reload (or a shared link) opens the same area
+  await expect(page).toHaveURL(/\?a=p:-?\d/)
+  const cells = await page.getByText(/grid cells/).innerText()
+  await page.reload()
+  await expect(page.getByRole('heading', { level: 1, name: /^Drawn area/ })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/grid cells/)).toHaveText(cells, { timeout: 30_000 })
 })
 
 test('the calendar names the busiest periods, shows the range of estimates and saves as an image', async ({ page }) => {
@@ -121,6 +127,49 @@ test('the calendar names the busiest periods, shows the range of estimates and s
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Download image' }).click()
   expect((await download).suggestedFilename()).toMatch(/^jangada-orbital-calendar_brazil_2001-\d{4}\.png$/)
+})
+
+test('a shared link reopens the area, the satellite and the years', async ({ page }) => {
+  await page.goto('./?a=uf:PA&v=obs:NOAA-20&y=2010-2020')
+  await expect(page.getByRole('heading', { level: 1, name: 'Pará' })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('button', { name: 'Observed' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('combobox', { name: 'Satellite' })).toHaveValue('NOAA-20')
+  await expect(page.getByRole('combobox', { name: 'From year', exact: true })).toHaveValue('2010')
+  await expect(page.getByRole('combobox', { name: 'To year', exact: true })).toHaveValue('2020')
+  await expect(page.getByRole('table', { name: /as observed by NOAA-20/ })).toBeAttached()
+})
+
+test('a shared municipality link loads its outline', async ({ page }) => {
+  await page.goto('./?a=m:2304400')
+  await expect(page.getByRole('heading', { level: 1, name: 'Fortaleza, CE' })).toBeVisible({ timeout: 30_000 })
+  await expect(page).toHaveURL(/\?a=m:2304400$/)
+})
+
+test('a tampered link falls back to Brazil without errors', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('./?a=uf:XX&v=obs:Landsat&y=1990-abc')
+  await expect(page.getByRole('heading', { level: 1, name: 'Brazil' })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('button', { name: 'Harmonized' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page).toHaveURL(/jangada-orbital\/?$|127\.0\.0\.1:\d+\/$/)
+  expect(errors).toEqual([])
+})
+
+test('the view is in the URL and the share buttons send it', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.goto('./')
+  await page.getByRole('combobox', { name: 'Area' }).selectOption('state', { timeout: 30_000 })
+  await page.getByRole('combobox', { name: 'State', exact: true }).selectOption('CE')
+  await expect(page.getByRole('heading', { level: 1, name: 'Ceará' })).toBeVisible()
+  await expect(page).toHaveURL(/\?a=uf:CE$/)
+  const whatsapp = page.getByRole('link', { name: /WhatsApp/ })
+  const href = decodeURIComponent((await whatsapp.getAttribute('href'))!)
+  expect(href).toMatch(/^https:\/\/wa\.me\/\?text=Ceará: /)
+  expect(href).toContain('?a=uf:CE')
+  expect(href.length).toBeLessThan(400)
+  await page.getByRole('button', { name: 'Copy link' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Link copied' })).toBeVisible()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/\?a=uf:CE$/)
 })
 
 test('the printed report holds the area, the calendar, the season and the sources on at most two A4 pages', async ({ page }) => {
