@@ -1,7 +1,8 @@
 # Demo video script
 
 30-second project demo for the NASA Space Apps Challenge 2026 submission ("Link to Project Demo" field).
-Target length: **28.0 s** (2 s of margin under the 30 s limit). Narration in Portuguese, burned-in English subtitles.
+Length: **28.0 s** (2 s of margin under the 30 s limit). Narration in Portuguese by a team member, burned-in English
+subtitles. The final cut (2026-11-15) follows the script below; see "How the final cut was made".
 
 Sources read on 2026-11-14:
 [Project Submission Guide](https://www.spaceappschallenge.org/resources/project-submission-guide/) (section "Tips for
@@ -29,60 +30,71 @@ Subtitle budget: at most 2.5 English words per second.
 
 | # | Time | On screen | Narration (Portuguese) | Subtitle (English) | Words / max |
 |---|---|---|---|---|---|
-| 1 | 0:00–0:02 | Title card on a plain dark background: "Jangada Orbital", `[MEMBER NAMES]`, "Fortaleza, Brazil" | Somos a equipe Jangada Orbital. | We are team Jangada Orbital. | 5 / 5 |
-| 2 | 0:02–0:05 | Text card: "MODIS · since 2000" and "VIIRS · since 2012 · ~6× more hotspots". Below: "Challenge: Harmonization of MODIS and VIIRS Hot Spots" | Dois sensores contam o fogo no Brasil e discordam. | Two sensors count Brazil's fires. They disagree. | 7 / 7.5 |
-| 3 | 0:05–0:10 | The app's opening screen with the map of Brazil. Overlay text: "Jangada Orbital: harmonized fire calendar" and the tagline | Jangada Orbital: um calendário de queimadas harmonizado. Dois sensores, um só registro do fogo. | Jangada Orbital: a harmonized fire calendar. Two sensors, one fire record. | 11 / 12.5 |
-| 4a | 0:10–0:12.5 | Screen recording: the cursor draws `[DEMO AREA]` on the map | Desenhe qualquer área do Brasil. | Draw any area in Brazil. | 5 / 6.25 |
-| 4b | 0:12.5–0:16.5 | The fire calendar (months × years) appears for that area. Slow zoom on the months that burned most. Small caption: "Data: NASA FIRMS (MODIS + VIIRS)" | Dados do NASA FIRMS mostram os meses e anos que mais queimaram. | NASA FIRMS data shows which months and years burned most. | 10 / 10 |
-| 4c | 0:16.5–0:20 | The current month compared with the historical median, then a click on the CSV download | Este mês está fora do normal? Baixe o CSV. | Is this month unusual? Download the CSV. | 7 / 8.75 |
-| 5 | 0:20–0:28 | 0:20–0:26: the calendar stays on screen, slow zoom out to the full map. 0:26–0:28: end card with "Jangada Orbital", `[APP URL]`, "Data: NASA FIRMS", "NASA Space Apps Challenge 2026 · Fortaleza" (text only) | Com um registro único, qualquer pessoa separa a queimada normal do sinal de alerta. Primeiro o Brasil, depois o mundo. | With one consistent record, anyone can tell normal burning from a warning sign. First Brazil, then the world. | 18 / 20 |
+| 1 | 0:00–0:03 | Title card: the Jangada Orbital mark, "Jangada Orbital", "Harmonized Fire Calendar", member names, "Fortaleza, Brazil · NASA Space Apps Challenge 2026" | Somos a Jangada Orbital, de Fortaleza. | We are Jangada Orbital, from Fortaleza. | 6 / 7.5 |
+| 2 | 0:03–0:07 | Text card: "Challenge · Harmonization of MODIS and VIIRS Hot Spots"; a MODIS bar (since 2000, 1 km) and a bar six times longer for VIIRS (since 2012, 375 m, "≈ 6× more hotspots over Brazil") | Dois satélites contam o fogo no Brasil. E discordam. | Two sensors count Brazil's fires. They disagree. | 7 / 10 |
+| 3 | 0:07–0:12 | Live app, Brazil: slow zoom from the map to the fire calendar. Label: "Live app · Brazil, 2001 to today" | Nós harmonizamos os dois num só calendário de queimadas, desde 2000. | We harmonized them into one fire calendar, since 2000. | 9 / 12.5 |
+| 4 | 0:12–0:17 | Live app: the state of Pará, then an area drawn on the map (Jalapão, Tocantins) with its own calendar | Escolha um estado, bioma, município, ou desenhe sua área. | Pick a state, biome, municipality, or draw your area. | 9 / 12.5 |
+| 5 | 0:17–0:22.5 | Live app, Pará: the Season tab (start, peak and end of each fire season), then "2026 so far" against the normal range with the "This year vs normal" map | Veja quando a temporada de fogo chega, e se este ano está fora do normal. | See when the fire season comes, and if this year is unusual. | 12 / 13.75 |
+| 6 | 0:22.5–0:26 | Method page: the validation chart and table (test years 2021–2022) | Validado em anos que o modelo nunca viu. | Validated on years the model never saw. | 7 / 8.75 |
+| 7 | 0:26–0:28 | End card: the mark, "Jangada Orbital", the app URL, "Data: NASA FIRMS (MODIS + VIIRS), IBGE · Open source, Apache-2.0", "NASA Space Apps Challenge 2026 · Fortaleza" | Primeiro o Brasil, depois o mundo. | First Brazil, then the world. | 5 / 5 |
 
-Totals: 63 subtitle words in 28 s (2.3 words/s). Narration: 74 Portuguese words (2.6 words/s), a normal speaking pace.
-Hard cut at 0:28.0. Nothing after the end card.
+Totals: 55 subtitle words in 28 s (2.0 words/s). Narration: 64 Portuguese words (2.3 words/s), a normal speaking pace.
+Hard cut at 0:28.0, after a 0.4 s fade to the background colour.
 
-Shot 2 covers both guide questions in three seconds: the challenge name is on screen, and "Brazil's fires" is the reason
-we chose it. If the narrator runs long, cut words from shot 5 first, never from shots 1–3.
+Shot 2 covers both guide questions: the challenge name is on screen, and "Brazil's fires" is the reason we chose it.
+If the narrator runs long, cut words from shot 5 first, never from shots 1–3.
 
 ### Subtitle file (`.srt`)
 
 ```srt
 1
-00:00:00,000 --> 00:00:02,000
-We are team Jangada Orbital.
+00:00:00,000 --> 00:00:03,000
+We are Jangada Orbital, from Fortaleza.
 
 2
-00:00:02,000 --> 00:00:05,000
-Two sensors count Brazil's fires.
-They disagree.
+00:00:03,000 --> 00:00:07,000
+Two sensors count Brazil's fires. They disagree.
 
 3
-00:00:05,000 --> 00:00:10,000
-Jangada Orbital: a harmonized fire calendar.
-Two sensors, one fire record.
+00:00:07,000 --> 00:00:12,000
+We harmonized them into one fire calendar, since 2000.
 
 4
-00:00:10,000 --> 00:00:12,500
-Draw any area in Brazil.
+00:00:12,000 --> 00:00:17,000
+Pick a state, biome, municipality, or draw your area.
 
 5
-00:00:12,500 --> 00:00:16,500
-NASA FIRMS data shows which months
-and years burned most.
+00:00:17,000 --> 00:00:22,500
+See when the fire season comes, and if this year is unusual.
 
 6
-00:00:16,500 --> 00:00:20,000
-Is this month unusual?
-Download the CSV.
+00:00:22,500 --> 00:00:26,000
+Validated on years the model never saw.
 
 7
-00:00:20,000 --> 00:00:24,000
-With one consistent record, anyone can tell
-normal burning from a warning sign.
-
-8
-00:00:24,000 --> 00:00:28,000
+00:00:26,000 --> 00:00:28,000
 First Brazil, then the world.
 ```
+
+The same file is `docs/demo/demo.srt`, for YouTube's English captions. If the narration is re-timed, both are updated
+from the cue list the render used.
+
+## How the final cut was made
+
+Instead of a screen recording edited by hand, the final cut is rendered by code, with the same method as our internal
+explainer video (inspired by [mexicat/pdoom-video](https://github.com/mexicat/pdoom-video)): every frame is a function of
+time, drawn with Skia (`@napi-rs/canvas`) and encoded with ffmpeg (libx264, 1080p, 30 fps).
+
+- App footage: screenshots of the deployed app at 1920×1080, English UI, dark theme, taken with Playwright from shareable
+  view links (`?a=uf:PA`, `?a=p:…` for the drawn area, `#method`). Each one is shown with a slow pan and zoom. They are
+  the real app on 2026-11-15, data through 14 Nov 2026; nothing on them was edited.
+- Title, challenge and end cards: drawn by the same script with the team's mark, the app's colours, Michroma and
+  Archivo (SIL Open Font License) and IBM Plex Mono (SIL OFL). No NASA logo or insignia.
+- Subtitles: burned in by the render, white Archivo at 54 px (5% of the frame height) on a dark box, at most two lines.
+- SI: the render script was written with Claude Code, so a small label in the lower-right corner reads
+  "Edited with SI-assisted code · app footage is the live app" for the whole video. The narration is a human voice.
+- Audio: the narration is cleaned (high-pass at 80 Hz, light denoise), normalized to −16 LUFS and padded to 28.0 s.
+  No music.
 
 ## Tagline options
 
@@ -127,7 +139,9 @@ Before recording:
 - Window at 1920×1080. Larger cursor (Windows Settings → Accessibility → Mouse pointer).
 - Nothing on screen may show a person's face, a personal account or an email address.
 
-## Recording and subtitling at no cost
+## Recording and subtitling at no cost (manual alternative)
+
+This was the plan before the code-rendered cut above. It stays as the fallback if the video has to be remade by hand.
 
 | Step | Tool (free) | Notes |
 |---|---|---|

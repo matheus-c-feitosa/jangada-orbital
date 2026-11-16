@@ -1,0 +1,27 @@
+1
+00:00:00,000 --> 00:00:03,000
+We are Jangada Orbital, from Fortaleza.
+
+2
+00:00:03,000 --> 00:00:07,000
+Two sensors count Brazil's fires. They disagree.
+
+3
+00:00:07,000 --> 00:00:12,000
+We harmonized them into one fire calendar, since 2000.
+
+4
+00:00:12,000 --> 00:00:17,000
+Pick a state, biome, municipality, or draw your area.
+
+5
+00:00:17,000 --> 00:00:22,500
+See when the fire season comes, and if this year is unusual.
+
+6
+00:00:22,500 --> 00:00:26,000
+Validated on years the model never saw.
+
+7
+00:00:26,000 --> 00:00:28,000
+First Brazil, then the world.
