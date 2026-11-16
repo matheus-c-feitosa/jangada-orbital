@@ -46,7 +46,8 @@ The web app turns that series into a burning activity calendar.
 - This year against normal, by state or biome.
 - Near-real-time detections of the last 7 days.
 
-**Downloads.** The monthly series as CSV, and the calendar as a PNG image.
+**Downloads and sharing.** The monthly series as CSV, the calendar as a PNG image or a printed A4 report, and a link
+that reopens the same area, values and years, ready to send on WhatsApp.
 
 **Method page.**
 - Which satellite counts each year.

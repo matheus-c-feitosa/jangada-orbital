@@ -11,7 +11,7 @@ export type Area =
   | { kind: 'country' }
   | { kind: 'state'; uf: string }
   | { kind: 'biome'; id: string }
-  | { kind: 'ring'; ring: Ring; label: string; origin: 'draw' | 'circle' | 'muni'; circle?: { lat: number; lon: number; km: number } }
+  | { kind: 'ring'; ring: Ring; label: string; origin: 'draw' | 'circle' | 'muni'; circle?: { lat: number; lon: number; km: number }; muni?: string }
 export type View = 'harmonized' | 'observed'
 export type AreaKind = 'brazil' | 'biome' | 'state' | 'muni' | 'drawn'
 
@@ -125,6 +125,8 @@ interface Props {
   onDownload: () => void
   /** "Print report" (desktop) */
   onPrint?: () => void
+  /** "Share this view" (desktop sidebar) */
+  share?: ReactNode
   /** "About this area" lines (desktop); the tablet shows them beside the data instead */
   about?: ReactNode
   /** tablet drawer: 48 px controls, biomes as radio buttons, no download button (it sits beside the data) */
@@ -307,6 +309,7 @@ export function AreaPanel(p: Props) {
               <Printer size={16} aria-hidden="true" /> {i.t('printReport')}
             </button>
           )}
+          {p.share}
         </>
       )}
       {/* the CSV holds monthly counts; single detections need the FIRMS archive (and a key that never reaches this site) */}

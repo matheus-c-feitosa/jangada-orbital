@@ -31,6 +31,8 @@ interface Props {
   notices: ReactNode
   canDownload: boolean
   onDownload: () => void
+  /** "Share this view", under the CSV download of the data view */
+  share?: ReactNode
   drawMode: DrawMode
   onDrawMode: (m: DrawMode) => void
   onConfirmBox: () => void
@@ -198,6 +200,7 @@ export function PhoneLayout(p: Props) {
               <button type="button" className="btn touch mt-5 w-full !min-h-12 !rounded-xl" onClick={p.onDownload} disabled={!p.canDownload}>
                 <Download size={18} aria-hidden="true" /> {i.t('downloadCsv')}
               </button>
+              {p.share && <div className="mt-4">{p.share}</div>}
             </div>
           </>
         )}
