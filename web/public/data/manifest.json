@@ -69,8 +69,8 @@
     },
     "recent": {
       "path": "recent.json",
-      "bytes": 265433,
-      "sha256": "db7e36d78d561aacc07173dfa7eef86d401ce4d73599797fe45233a569957d90"
+      "bytes": 265431,
+      "sha256": "3d6b208c02dab8303f89cb114e5e2c8486e631abbc4d4a83eb5556b20138e8a6"
     },
     "intensity": {
       "path": "intensity.json",
