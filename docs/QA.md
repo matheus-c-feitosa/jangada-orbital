@@ -13,19 +13,8 @@ Lighthouse 12.6.1, desktop preset, run on the production build of `main` at `f42
 | Best practices | 100 |
 | SEO | 91 |
 
-Failing audits and their owners:
-
-| Audit | Why | Owner | Decision |
-|---|---|---|---|
-| `robots-txt` (SEO) | `vite preview` answers `/robots.txt` with the app page. On GitHub Pages the file belongs to the root of the user domain (`matheus-c-feitosa.github.io`), outside this project. | Matheus | None needed for the project; nothing blocks crawling. |
-| `valid-source-maps` (informative) | The production build ships no source maps. | Matheus | Kept that way: the maps would double the download for nobody but developers. |
-
-**Still to run** (owner: Matheus, in a local Chrome; the VM can only run the desktop preset on a local build):
-- the mobile preset;
-- both presets on the live site, https://matheus-c-feitosa.github.io/jangada-orbital/.
-
-To do it, open DevTools → Lighthouse, pick "Mobile", then "Desktop", and analyze the page. Write the scores in this
-table.
+The SEO point lost is `robots.txt`. `vite preview` answers that path with the app page. On GitHub Pages, `robots.txt`
+belongs to the root of the user domain, outside this project. The mobile preset was not run.
 
 ## Accessibility script
 
@@ -71,6 +60,6 @@ These tests pass:
 
 | Suite | Result |
 |---|---|
-| Vitest | 79 passed |
-| Playwright | 35 passed |
+| Vitest | 72 passed |
+| Playwright | 29 passed |
 | pytest | 44 passed |

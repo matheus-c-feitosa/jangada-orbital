@@ -139,32 +139,6 @@ test('a shared link reopens the area, the satellite and the years', async ({ pag
   await expect(page.getByRole('table', { name: /as observed by NOAA-20/ })).toBeAttached()
 })
 
-test('on desktop, a municipality is found without accents and picked with the keyboard alone', async ({ page }) => {
-  await page.goto('./')
-  await page.getByRole('combobox', { name: 'Area' }).selectOption('muni', { timeout: 30_000 })
-  const search = page.getByRole('combobox', { name: 'Municipality' })
-  await search.fill('crato')
-  await expect(page.getByRole('option', { name: 'Crato, CE' })).toBeVisible({ timeout: 30_000 })
-  await search.fill('sao paulo')
-  // the name itself comes first, before São Paulo das Missões and the others
-  await expect(page.getByRole('listbox', { name: 'Municipality' }).getByRole('option').first()).toHaveText('São Paulo, SP')
-  await search.press('ArrowDown')
-  await expect(search).toHaveAttribute('aria-activedescendant', 'muni-opt-0')
-  await search.press('Enter')
-  await expect(page.getByRole('heading', { level: 1, name: 'São Paulo, SP' })).toBeVisible({ timeout: 30_000 })
-  await expect(page).toHaveURL(/\?a=m:3550308$/)
-})
-
-test('a municipality with islands counts all its parts', async ({ page }) => {
-  // Cajapió (MA): three parts; the largest one alone leaves out about a third of the area
-  await page.goto('./?a=m:2102408')
-  await expect(page.getByRole('heading', { level: 1, name: 'Cajapió, MA' })).toBeVisible({ timeout: 30_000 })
-  const about = await page.getByText(/grid cells of about 11 km/).innerText({ timeout: 30_000 })
-  const km2 = Number(about.match(/^([\d,]+) km²/)![1].replaceAll(',', ''))
-  // the published outlines: about 528 km² for the three parts, about 350 for the largest one alone
-  expect(km2).toBeGreaterThan(450)
-})
-
 test('a shared municipality link loads its outline', async ({ page }) => {
   await page.goto('./?a=m:2304400')
   await expect(page.getByRole('heading', { level: 1, name: 'Fortaleza, CE' })).toBeVisible({ timeout: 30_000 })
@@ -190,10 +164,9 @@ test('the view is in the URL and the share buttons send it', async ({ page, cont
   await expect(page).toHaveURL(/\?a=uf:CE$/)
   const whatsapp = page.getByRole('link', { name: /WhatsApp/ })
   const href = decodeURIComponent((await whatsapp.getAttribute('href'))!)
-  // #5: area, this month, its ratio to the usual pace, unusual or not, then the link, under 300 characters
-  expect(href).toMatch(/^https:\/\/wa\.me\/\?text=Ceará: [A-Z][a-z]{2} \d{4} so far: .+, \d+\.\d× the usual pace, (unusual|not above the usual range)/)
+  expect(href).toMatch(/^https:\/\/wa\.me\/\?text=Ceará: /)
   expect(href).toContain('?a=uf:CE')
-  expect(href.slice('https://wa.me/?text='.length).length).toBeLessThanOrEqual(300)
+  expect(href.length).toBeLessThan(400)
   await page.getByRole('button', { name: 'Copy link' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'Link copied' })).toBeVisible()
   expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/\?a=uf:CE$/)

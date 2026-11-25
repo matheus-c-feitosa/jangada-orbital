@@ -59,27 +59,6 @@ export function cellsInRing(ring: Ring): { cells: Set<number>; box: CellBox | nu
   return { cells: new Set([cellKey(cLat, cLon)]), box: { latMin: cLat, latMax: cLat, lonMin: cLon, lonMax: cLon }, approximate: true }
 }
 
-/**
- * Cells of an area made of several parts (a municipality with islands): the main ring as `cellsInRing` reads it, plus
- * the cells whose centre falls inside each other part. A part too small for a cell centre adds nothing, so a small
- * island does not pull in a whole 0.1° cell of sea.
- */
-export function cellsInRings(main: Ring, parts: Ring[] = []): { cells: Set<number>; box: CellBox | null; approximate: boolean } {
-  const first = cellsInRing(main)
-  if (!parts.length) return first
-  const cells = new Set(first.approximate ? [] : first.cells)
-  let box = first.approximate ? null : first.box
-  for (const p of parts) {
-    const r = cellsInRing(p)
-    if (r.approximate || !r.box) continue
-    for (const c of r.cells) cells.add(c)
-    box = box
-      ? { latMin: Math.min(box.latMin, r.box.latMin), latMax: Math.max(box.latMax, r.box.latMax), lonMin: Math.min(box.lonMin, r.box.lonMin), lonMax: Math.max(box.lonMax, r.box.lonMax) }
-      : r.box
-  }
-  return cells.size ? { cells, box, approximate: false } : first
-}
-
 /** Circle of `km` radius around (lat, lon) as a 64-vertex ring (spherical approximation). */
 export function circleRing(lat: number, lon: number, km: number, vertices = 64): Ring {
   const R = 6371.0088
